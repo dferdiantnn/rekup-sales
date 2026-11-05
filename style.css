@@ -158,6 +158,13 @@ body {
   gap: 12px;
 }
 
+@media (max-width: 580px) {
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
 .flex-1 { flex: 1; }
 .flex-2 { flex: 2; }
 
@@ -543,16 +550,18 @@ textarea:focus {
 }
 
 .input-qty {
-  width: 55px;
+  width: 50px;
   text-align: center;
-  padding: 6px 8px !important;
-  font-weight: 600;
+  padding: 6px 6px !important;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .input-nom {
-  width: 110px;
+  width: 115px;
   padding: 6px 8px !important;
-  font-weight: 600;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .sep {
@@ -617,19 +626,20 @@ textarea:focus {
 }
 
 .day-sales-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
 .day-input-card {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   background: var(--bg-card-sub);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
+  transition: var(--transition);
 }
 
 .day-input-card.today-highlight {
@@ -638,10 +648,11 @@ textarea:focus {
 }
 
 .day-name {
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
-  width: 52px;
+  width: 72px;
   color: var(--color-primary-dark);
+  flex-shrink: 0;
 }
 
 .day-val-wrapper {
@@ -653,15 +664,16 @@ textarea:focus {
 
 .day-val-wrapper span {
   position: absolute;
-  left: 6px;
-  font-size: 11px;
+  left: 12px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-muted);
 }
 
 .day-val-wrapper input {
-  padding: 4px 6px 4px 26px !important;
-  font-size: 12.5px;
-  font-weight: 600;
+  padding: 8px 12px 8px 38px !important;
+  font-size: 14.5px;
+  font-weight: 700;
   width: 100%;
 }
 
