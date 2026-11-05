@@ -886,5 +886,51 @@ function parseReceiptText(text) {
 
 // Initial Run
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
   renderAll();
 });
+
+// Theme Management (Dark Mode & Light Mode)
+const btnThemeToggle = document.getElementById("btnThemeToggle");
+
+function applyTheme(theme) {
+  if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    if (btnThemeToggle) {
+      btnThemeToggle.innerHTML = '<span class="theme-icon">☀️</span>';
+      btnThemeToggle.setAttribute("title", "Ganti ke Mode Terang");
+    }
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+    if (btnThemeToggle) {
+      btnThemeToggle.innerHTML = '<span class="theme-icon">🌙</span>';
+      btnThemeToggle.setAttribute("title", "Ganti ke Mode Gelap");
+    }
+  }
+  try {
+    localStorage.setItem("rekup_sales_theme", theme);
+  } catch (e) {}
+}
+
+function initTheme() {
+  let initialTheme = "light";
+  try {
+    const saved = localStorage.getItem("rekup_sales_theme");
+    if (saved) {
+      initialTheme = saved;
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      initialTheme = "dark";
+    }
+  } catch (e) {}
+
+  applyTheme(initialTheme);
+
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      const nextTheme = current === "dark" ? "light" : "dark";
+      applyTheme(nextTheme);
+      showToast(nextTheme === "dark" ? "Mode Gelap aktif! 🌙" : "Mode Terang aktif! ☀️");
+    });
+  }
+}
