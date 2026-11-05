@@ -52,17 +52,32 @@
       <p class="section-desc">Foto atau unggah struk harian (Kopi Kenangan / POS). Sistem akan otomatis membaca Total Sales, ADT (Print Count), dan menghitung AT.</p>
 
       <div class="upload-area" id="dropArea">
-        <input type="file" id="receiptInput" accept="image/*" capture="environment" class="file-input">
+        <!-- Hidden inputs: One for forced camera capture, one for gallery/file picker -->
+        <input type="file" id="receiptInputCamera" accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="receiptInputGallery" accept="image/*" class="hidden">
+
         <div class="upload-content" id="uploadPlaceholder">
-          <div class="upload-icon-bubble">📷</div>
+          <div class="upload-icon-bubble">📸</div>
           <div class="upload-text">
-            <strong>Ketuk untuk Foto / Pilih Gambar Struk</strong>
-            <span>Mendukung kamera HP & file galeri (JPG, PNG)</span>
+            <strong>Unggah atau Foto Struk Kasir</strong>
+            <span>Pilih foto langsung dari kamera atau ambil dari galeri HP</span>
+          </div>
+          <div class="upload-buttons-row">
+            <button type="button" class="btn-scan-action btn-scan-camera" id="btnActionCamera">
+              📷 Buka Kamera
+            </button>
+            <button type="button" class="btn-scan-action btn-scan-gallery" id="btnActionGallery">
+              🖼️ Pilih dari Galeri
+            </button>
           </div>
         </div>
+
         <div class="image-preview-wrapper hidden" id="imagePreviewWrapper">
           <img id="imagePreview" alt="Preview Struk">
-          <button type="button" class="btn-change-image" id="btnChangeImage">Ganti Foto</button>
+          <div class="preview-action-buttons">
+            <button type="button" class="btn-preview-opt" id="btnRetakeCamera">📷 Foto Ulang</button>
+            <button type="button" class="btn-preview-opt" id="btnChangeGallery">🖼️ Dari Galeri</button>
+          </div>
         </div>
       </div>
 

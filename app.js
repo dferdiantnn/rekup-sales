@@ -617,12 +617,17 @@ document.getElementById("btnResetAll").addEventListener("click", () => {
 // ==========================================
 // OCR Engine (Tesseract.js + Smart Parser)
 // ==========================================
-const receiptInput = document.getElementById("receiptInput");
+const receiptInputCamera = document.getElementById("receiptInputCamera");
+const receiptInputGallery = document.getElementById("receiptInputGallery");
+const btnActionCamera = document.getElementById("btnActionCamera");
+const btnActionGallery = document.getElementById("btnActionGallery");
+const btnRetakeCamera = document.getElementById("btnRetakeCamera");
+const btnChangeGallery = document.getElementById("btnChangeGallery");
+
 const dropArea = document.getElementById("dropArea");
 const uploadPlaceholder = document.getElementById("uploadPlaceholder");
 const imagePreviewWrapper = document.getElementById("imagePreviewWrapper");
 const imagePreview = document.getElementById("imagePreview");
-const btnChangeImage = document.getElementById("btnChangeImage");
 const ocrProgressBox = document.getElementById("ocrProgressBox");
 const ocrProgressBar = document.getElementById("ocrProgressBar");
 const ocrStatusText = document.getElementById("ocrStatusText");
@@ -631,15 +636,78 @@ const detectedAdt = document.getElementById("detectedAdt");
 const detectedSales = document.getElementById("detectedSales");
 const detectedDate = document.getElementById("detectedDate");
 
-receiptInput.addEventListener("change", (e) => {
+// Camera actions
+if (btnActionCamera) {
+  btnActionCamera.addEventListener("click", (e) => {
+    e.stopPropagation();
+    receiptInputCamera.value = "";
+    receiptInputCamera.click();
+  });
+}
+if (btnRetakeCamera) {
+  btnRetakeCamera.addEventListener("click", (e) => {
+    e.stopPropagation();
+    receiptInputCamera.value = "";
+    receiptInputCamera.click();
+  });
+}
+
+// Gallery actions
+if (btnActionGallery) {
+  btnActionGallery.addEventListener("click", (e) => {
+    e.stopPropagation();
+    receiptInputGallery.value = "";
+    receiptInputGallery.click();
+  });
+}
+if (btnChangeGallery) {
+  btnChangeGallery.addEventListener("click", (e) => {
+    e.stopPropagation();
+    receiptInputGallery.value = "";
+    receiptInputGallery.click();
+  });
+}
+
+// File change handlers
+receiptInputCamera.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (file) handleImageFile(file);
 });
 
-btnChangeImage.addEventListener("click", (e) => {
-  e.stopPropagation();
-  receiptInput.value = "";
-  receiptInput.click();
+receiptInputGallery.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) handleImageFile(file);
+});
+
+// Drag & Drop Support
+dropArea.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropArea.classList.add("drag-over");
+});
+dropArea.addEventListener("dragleave", () => {
+  dropArea.classList.remove("drag-over");
+});
+dropArea.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropArea.classList.remove("drag-over");
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+    handleImageFile(e.dataTransfer.files[0]);
+  }
+});
+
+// Paste Image Support (Ctrl+V)
+document.addEventListener("paste", (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type && items[i].type.startsWith("image/")) {
+      const file = items[i].getAsFile();
+      if (file) {
+        handleImageFile(file);
+        break;
+      }
+    }
+  }
 });
 
 function handleImageFile(file) {
