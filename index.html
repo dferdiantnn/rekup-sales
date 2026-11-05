@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Rekup Sales ☕✨</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Tesseract.js for client-side OCR (Runs 100% in browser, completely free & offline-ready after load) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon">☕</span>
+        <div>
+          <h1 class="brand-title">Rekup Sales <span class="badge">v1.0</span></h1>
+          <p class="brand-sub">Auto Scan Struk & Format WhatsApp Rekap Sales</p>
+        </div>
+      </div>
+      <button id="btnResetAll" class="btn-ghost-sm" title="Reset Semua Form">↺ Reset</button>
+    </header>
+
+    <!-- Store Profile & Date Card -->
+    <section class="card config-card">
+      <div class="form-row">
+        <div class="form-group flex-2">
+          <label for="storeName">Nama Outlet / Store</label>
+          <div class="input-with-icon">
+            <span class="icon">🏪</span>
+            <input type="text" id="storeName" value="KK SPBU PUSPITEK" placeholder="Contoh: KK SPBU PUSPITEK">
+          </div>
+        </div>
+        <div class="form-group flex-1">
+          <label for="reportDate">Tanggal Laporan</label>
+          <input type="date" id="reportDate">
+        </div>
+      </div>
+      <div class="date-preview-pill" id="dateFormattedPreview">Rabu, 04 November 2026</div>
+    </section>
+
+    <!-- OCR Scanner Box -->
+    <section class="card scan-card">
+      <div class="section-title">
+        <span>📸 Scan Struk Kasir (OCR)</span>
+        <span class="chip">Otomatis / AI</span>
+      </div>
+      <p class="section-desc">Foto atau unggah struk harian (Kopi Kenangan / POS). Sistem akan otomatis membaca Total Sales, ADT (Print Count), dan menghitung AT.</p>
+
+      <div class="upload-area" id="dropArea">
+        <input type="file" id="receiptInput" accept="image/*" capture="environment" class="file-input">
+        <div class="upload-content" id="uploadPlaceholder">
+          <div class="upload-icon-bubble">📷</div>
+          <div class="upload-text">
+            <strong>Ketuk untuk Foto / Pilih Gambar Struk</strong>
+            <span>Mendukung kamera HP & file galeri (JPG, PNG)</span>
+          </div>
+        </div>
+        <div class="image-preview-wrapper hidden" id="imagePreviewWrapper">
+          <img id="imagePreview" alt="Preview Struk">
+          <button type="button" class="btn-change-image" id="btnChangeImage">Ganti Foto</button>
+        </div>
+      </div>
+
+      <!-- OCR Progress Bar -->
+      <div class="ocr-progress-box hidden" id="ocrProgressBox">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="ocrProgressBar"></div>
+        </div>
+        <div class="progress-status" id="ocrStatusText">Mempersiapkan OCR...</div>
+      </div>
+
+      <!-- Raw OCR Detection Snippet -->
+      <div class="ocr-detected-box hidden" id="ocrDetectedBox">
+        <div class="detected-badge">✓ Terdeteksi Otomatis</div>
+        <div class="detected-grid">
+          <div><small>Print Count (ADT):</small> <b id="detectedAdt">-</b></div>
+          <div><small>Total Sales:</small> <b id="detectedSales">-</b></div>
+          <div><small>Tanggal Struk:</small> <b id="detectedDate">-</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Primary Metrics Form (Sales, ADT, AT) -->
+    <section class="card metrics-card">
+      <div class="section-title">
+        <span>📊 Data Penjualan Hari Ini</span>
+        <span class="chip chip-accent">Bisa Diedit Manual</span>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="form-group metric-box">
+          <label for="inputSales">Sales (Total Penjualan)</label>
+          <div class="input-currency">
+            <span>Rp.</span>
+            <input type="text" id="inputSales" placeholder="7.246.840" inputmode="numeric">
+          </div>
+          <small class="helper-text">Diambil dari baris Total di struk</small>
+        </div>
+
+        <div class="form-group metric-box">
+          <label for="inputAdt">ADT (Print Count)</label>
+          <input type="number" id="inputAdt" placeholder="178" inputmode="numeric">
+          <small class="helper-text">Jumlah transaksi harian</small>
+        </div>
+
+        <div class="form-group metric-box highlight-box">
+          <label for="displayAt">AT (Sales ÷ ADT)</label>
+          <div class="input-currency static-currency">
+            <span>Rp.</span>
+            <input type="text" id="displayAt" readonly placeholder="40.713">
+          </div>
+          <small class="helper-text">Rata-rata penjualan per transaksi</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sub Items Categories (CR, Basic Food, Toast, KM, PAHE, MO, Merchandise) -->
+    <section class="card categories-card">
+      <div class="section-title">
+        <span>🥐 Rincian Kategori Menu (Sub-Items)</span>
+      </div>
+      <p class="section-desc">Isi jumlah (Qty) dan nominal Rupiah per kategori, atau tambahkan rincian sub-item otomatis.</p>
+
+      <div class="categories-list" id="categoriesContainer">
+        <!-- Will be dynamically populated or pre-rendered -->
+      </div>
+    </section>
+
+    <!-- Weekly Comparison Card -->
+    <section class="card weekly-card">
+      <div class="section-title">
+        <span>📅 Compare Sales (Minggu Lalu vs Minggu Ini)</span>
+        <button type="button" class="btn-ghost-sm" id="btnRollWeek" title="Geser Minggu Ini jadi Minggu Lalu">
+          ⬆ Arsip ke Last Week
+        </button>
+      </div>
+
+      <!-- Last Week -->
+      <div class="week-block">
+        <div class="week-header">
+          <span class="week-badge badge-prev">Minggu Lalu (Last Week)</span>
+          <input type="text" id="lastWeekLabel" class="week-label-input" value="This week 26 Oktober - 1 November 2026">
+        </div>
+        <div class="day-sales-grid" id="lastWeekDays">
+          <!-- Mon - Sun -->
+        </div>
+        <div class="subtotal-row">
+          <span>Subtotal this week:</span>
+          <strong id="lastWeekSubtotal">Rp. 45.674.120</strong>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- This Week -->
+      <div class="week-block">
+        <div class="week-header">
+          <span class="week-badge badge-curr">Minggu Ini (This Week)</span>
+          <input type="text" id="thisWeekLabel" class="week-label-input" value="This week 2 November - 8 November 2026">
+        </div>
+        <div class="day-sales-grid" id="thisWeekDays">
+          <!-- Mon - Sun -->
+        </div>
+        <div class="subtotal-row highlight-subtotal">
+          <span>Subtotal this week:</span>
+          <strong id="thisWeekSubtotal">Rp. 13.634.050</strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- Target & Achievement -->
+    <section class="card target-card">
+      <div class="section-title">
+        <span>🎯 Target & Achievement Bulanan</span>
+      </div>
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label for="monthName">Bulan</label>
+          <input type="text" id="monthName" value="November">
+        </div>
+        <div class="form-group flex-2">
+          <label for="inputTarget">Target Penjualan (Rp)</label>
+          <div class="input-currency">
+            <span>Rp.</span>
+            <input type="text" id="inputTarget" placeholder="-" value="-">
+          </div>
+        </div>
+        <div class="form-group flex-2">
+          <label for="inputAchievement">Achievement Bulan Ini (Rp)</label>
+          <div class="input-currency">
+            <span>Rp.</span>
+            <input type="text" id="inputAchievement" placeholder="20.685.870">
+          </div>
+          <small class="helper-text">Total sales terhitung dari tgl 1 s/d hari ini</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- WhatsApp Output & Action Bar -->
+    <section class="card preview-card">
+      <div class="section-title">
+        <span>📱 Hasil Format Teks WhatsApp</span>
+        <span class="chip chip-success">Siap Kirim</span>
+      </div>
+      <textarea id="outputWhatsapp" class="wa-preview-text" readonly rows="18"></textarea>
+
+      <div class="action-buttons-group">
+        <button type="button" class="btn btn-secondary" id="btnCopyWa">
+          📋 Salin Teks Format WA
+        </button>
+        <button type="button" class="btn btn-whatsapp" id="btnSendWa">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67Z"/>
+          </svg>
+          Kirim ke WhatsApp
+        </button>
+      </div>
+    </section>
+
+    <!-- Sub-item Modal / Bottom Sheet -->
+    <div class="modal-backdrop hidden" id="itemModal">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3 id="modalCategoryTitle">Tambah Rincian Menu</h3>
+          <button type="button" class="btn-close" id="btnCloseModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-sub">Rincian produk di bawah kategori ini. Sistem akan menjumlahkan total Qty dan Nominal otomatis.</p>
+          <div id="subItemList" class="sub-item-list"></div>
+          <button type="button" class="btn-add-row" id="btnAddSubItemRow">+ Tambah Baris Produk</button>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btnCancelModal">Batal</button>
+          <button type="button" class="btn btn-primary" id="btnSaveSubItems">Simpan Rincian</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden">Teks WhatsApp berhasil disalin! 🎉</div>
+
+    <footer class="app-footer">
+      <p>Rekup Sales • Didesain khusus mobile & tablet • Tersimpan di perangkat (LocalStorage)</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
