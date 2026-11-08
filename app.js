@@ -846,12 +846,58 @@ document.getElementById("btnSendWa").addEventListener("click", () => {
   window.open(waUrl, "_blank");
 });
 
+// Clean Daily Form (Keep weekly history & target intact)
+function cleanDailyForm() {
+  if (confirm("Bersihkan formulir harian (Foto struk, Sales, ADT, dan Menu)?\n\n✓ Histori perbandingan mingguan (This Week vs Last Week) dan Target BULANAN akan TETAP AMAN di database.")) {
+    state.sales = "";
+    state.adt = "";
+    state.at = "";
+
+    // Clear receipt image preview
+    imagePreview.src = "";
+    imagePreviewWrapper.classList.add("hidden");
+    uploadPlaceholder.classList.remove("hidden");
+    ocrDetectedBox.classList.add("hidden");
+    receiptInputCamera.value = "";
+    receiptInputGallery.value = "";
+
+    // Reset sub-items to blank
+    state.categories.forEach(cat => {
+      if (cat.name === "MO") {
+        cat.qty = "-";
+        cat.nominal = "";
+      } else if (cat.name === "Merchandise") {
+        cat.qty = "-";
+        cat.nominal = "-";
+      } else if (cat.name === "KM") {
+        cat.qty = "";
+        cat.nominal = "";
+      } else {
+        cat.qty = "";
+        cat.nominal = "";
+      }
+      cat.subItems = [];
+    });
+
+    renderAll();
+    saveLocalState();
+    saveToCloud(true);
+    showToast("Form harian dibersihkan! Histori mingguan tetap aman 🧹✨");
+  }
+}
+
+const btnCleanDaily = document.getElementById("btnCleanDaily");
+if (btnCleanDaily) {
+  btnCleanDaily.addEventListener("click", cleanDailyForm);
+}
+
 document.getElementById("btnResetAll").addEventListener("click", () => {
-  if (confirm("Reset semua data kembali ke default?")) {
+  if (confirm("Reset SEMUA data kembali ke default awal (termasuk histori mingguan)?")) {
     localStorage.removeItem("rekup_sales_state_v2");
     state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     renderAll();
-    showToast("Data di-reset ke default! ↺");
+    saveToCloud(true);
+    showToast("Semua data di-reset ke default! ↺");
   }
 });
 
