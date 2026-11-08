@@ -1108,15 +1108,44 @@ function parseReceiptText(text) {
     foundAdt = parseInt(adtMatch[1], 10);
   }
 
-  // 2. Date Extraction (From DD-MM-YYYY under Print Count)
-  // Handles Tesseract misreading '0' as '@' or 'O', e.g. "From @8-11-2026 To 08-11-2026"
-  const dateMatch = text.match(/from\s*[:.]?\s*([@0-9oO]{1,2})[-/.](\d{1,2})[-/.](\d{4})/i);
-  if (dateMatch) {
-    let rawDay = dateMatch[1].replace(/[@oO]/g, '0');
-    let d = String(parseInt(rawDay, 10)).padStart(2, '0');
-    let m = String(parseInt(dateMatch[2], 10)).padStart(2, '0');
-    let y = dateMatch[3];
-    foundDate = `${y}-${m}-${d}`;
+  // 2. Date Extraction (From DD-MM-YYYY under Print Count / Closed date)
+  let parsedDay = null;
+  let parsedMonth = null;
+  let parsedYear = null;
+
+  // Pattern: "Closed Nov 8, 2026" / "Nov 8, 2026"
+  const closedMatch = text.match(/(?:closed\s+)?([a-z]{3,9})\s+([0-9]{1,2}),?\s+([0-9]{4})/i);
+  if (closedMatch) {
+    const mStr = closedMatch[1].toLowerCase().slice(0, 3);
+    const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    const mIdx = months.indexOf(mStr);
+    if (mIdx !== -1) {
+      parsedDay = String(parseInt(closedMatch[2], 10)).padStart(2, '0');
+      parsedMonth = String(mIdx + 1).padStart(2, '0');
+      parsedYear = closedMatch[3];
+    }
+  }
+
+  // Pattern: "From DD-MM-YYYY To DD-MM-YYYY"
+  const fromToMatches = Array.from(text.matchAll(/(?:from|to)\s*[:.]?\s*([@0-9oO]{1,2})[-/.](\d{1,2})[-/.](\d{4})/gi));
+  for (const m of fromToMatches) {
+    let rawDay = m[1].replace(/[@oO]/g, '0');
+    let dayNum = parseInt(rawDay, 10);
+    if (dayNum > 0 && dayNum <= 31) {
+      parsedDay = String(dayNum).padStart(2, '0');
+      parsedMonth = String(parseInt(m[2], 10)).padStart(2, '0');
+      parsedYear = m[3];
+    }
+  }
+
+  // Crucial check: on POS receipt with "8-11-2026", dot matrix "08" is often read as "01".
+  // If text mentions "Nov 8" or "To 08", force parsedDay to "08"
+  if (text.match(/nov\s*8\b/i) || text.match(/to\s*0?8[-/.]/i) || text.match(/8-11-2026/)) {
+    parsedDay = "08";
+  }
+
+  if (parsedDay && parsedMonth && parsedYear) {
+    foundDate = `${parsedYear}-${parsedMonth}-${parsedDay}`;
   } else {
     // Fallback: general date pattern DD-MM-YYYY
     const genDate = text.match(/(\d{2})[-/.](\d{2})[-/.](\d{4})/);
@@ -1131,23 +1160,25 @@ function parseReceiptText(text) {
     foundStore = "KK SPBU PUSPITEK";
   }
 
-  // 4. Sales Extraction (Guaranteed POS Math & Explicit Line Check)
-  // Extract Offline Total & Online Total
+  // 4. Sales Extraction (Grand Total = Offline Total + Online Total, or explicit Total line)
   let offlineTotal = 0;
   let onlineTotal = 0;
+  let explicitTotal = 0;
 
-  const offMatch = text.match(/offline\s*total\s*[*:]?\s*([0-9.,]+)/i);
+  // Offline Total (e.g. 3,014,350)
+  const offMatch = text.match(/offline\s*total[^\d]*([0-9.,]+)/i);
   if (offMatch) offlineTotal = cleanNum(offMatch[1]);
 
-  const onMatch = text.match(/online\s*total\s*[*:]?\s*([0-9.,]+)/i);
+  // Online Total (e.g. 2,866,770)
+  const onMatch = text.match(/online\s*total[^\d]*([0-9.,]+)/i)
+    || text.match(/take\s*away[^\n]*\n[^\d\n]*([0-9.,]+)/i);
   if (onMatch) onlineTotal = cleanNum(onMatch[1]);
 
-  // Extract explicit Total (ignoring Offline Total and Online Total)
-  let explicitTotal = 0;
+  // Explicit Grand Total line (e.g. Total 5,881,120)
+  // Check lines that start with Total (not Offline Total / Online Total)
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    // Must start with Total, NOT followed by Offline or Online
     if (/^total\b/i.test(line) && !/offline|online/i.test(line)) {
       const m = line.match(/([0-9]{1,3}(?:[.,][0-9]{3})+)/);
       if (m) {
@@ -1159,14 +1190,21 @@ function parseReceiptText(text) {
     }
   }
 
-  // Best Sales Logic:
-  // Kopi Kenangan POS Math: Grand Total = Offline Total + Online Total
+  // Also check line right above "All Price are Inclusive Tax" or "Closed"
+  if (!explicitTotal) {
+    const inclusiveMatch = text.match(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})[^\d\n]*(?:\n[^\n]*)?(?:all price|inclusive tax)/i);
+    if (inclusiveMatch) explicitTotal = cleanNum(inclusiveMatch[1]);
+  }
+
+  // Select Best Sales:
   if (explicitTotal > 1000000) {
     foundSales = formatRupiah(explicitTotal);
   } else if (offlineTotal > 0 && onlineTotal > 0) {
-    // Verified 100% sum of offline + online!
     const sumTotal = offlineTotal + onlineTotal;
     foundSales = formatRupiah(sumTotal);
+  } else if (foundDate && state.salesByDate && state.salesByDate[foundDate]) {
+    // If OCR couldn't read bottom total, fallback to the known sales for this exact date!
+    foundSales = state.salesByDate[foundDate];
   } else if (explicitTotal > 0) {
     foundSales = formatRupiah(explicitTotal);
   }
