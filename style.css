@@ -1024,6 +1024,12 @@ textarea:focus {
   background: var(--color-wa-dark);
 }
 
+.weekly-btn-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .btn-ghost-sm {
   background: transparent;
   border: 1px solid var(--border-color);

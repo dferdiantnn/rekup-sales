@@ -38,8 +38,8 @@ const DEFAULT_CATEGORIES = [
   { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: 8, nominal: "144.350", subItems: [] },
   { id: "KM", name: "KM", desc: "Kenangan Manis", qty: 3, nominal: "52.000", subItems: [] },
   { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: 8, nominal: "146.100", subItems: [] },
-  { id: "MO", name: "MO", desc: "Make Order", qty: "-", nominal: "", subItems: [] },
-  { id: "Merchandise", name: "Merchandise", desc: "Tumbler, Biji Kopi, dll", qty: "-", nominal: "-", subItems: [] }
+  { id: "MO", name: "MO", desc: "Make Order", qty: "", nominal: "", subItems: [] },
+  { id: "Merchandise", name: "Merchandise", desc: "Tumbler, Biji Kopi, dll", qty: "", nominal: "", subItems: [] }
 ];
 
 const DEFAULT_STATE = {
@@ -577,24 +577,23 @@ function generateWhatsAppText() {
   const adtStr = state.adt ? `${state.adt}` : "";
   const atStr = state.at ? `Rp. ${state.at}` : "Rp. ";
 
-  // Categories format
+  // Categories format: jika kosong "- / -", jika ada isi "x / xxxxxx"
   const catLines = state.categories.map(c => {
-    let q = c.qty !== undefined && c.qty !== null ? c.qty : "";
-    let n = c.nominal !== undefined && c.nominal !== null ? c.nominal : "";
+    const rawQ = c.qty !== undefined && c.qty !== null ? String(c.qty).trim() : "";
+    const rawN = c.nominal !== undefined && c.nominal !== null ? String(c.nominal).trim() : "";
 
-    if (c.name === "MO" && (q === "-" || q === "") && !n) {
-      return `MO : -`;
+    const hasQ = rawQ !== "" && rawQ !== "-";
+    const hasN = rawN !== "" && rawN !== "-";
+
+    const prefix = c.name === "CR" ? " CR" : c.name;
+
+    if (!hasQ && !hasN) {
+      return `${prefix} : - / -`;
     }
-    if (c.name === "Merchandise" && (q === "-" || q === "") && (n === "-" || n === "")) {
-      return `Merchandise : - / Rp. -`;
-    }
-    if (c.name === "KM" && !q && !n) {
-      return `KM : /`;
-    }
-    if (c.name === "CR") {
-      return ` CR : ${q} /${n}`;
-    }
-    return `${c.name} : ${q} /${n}`;
+
+    const qDisplay = hasQ ? rawQ : "-";
+    const nDisplay = hasN ? rawN : "-";
+    return `${prefix} : ${qDisplay} /${nDisplay}`;
   }).join("\n");
 
   const weekData = getWeekData();
@@ -817,24 +816,55 @@ inputAchievement.addEventListener("input", (e) => {
   updateWhatsAppOutput();
 });
 
-// Weekly roll-over feature (manual push)
-document.getElementById("btnRollWeek").addEventListener("click", () => {
-  if (confirm("Geser tanggal laporan ke Senin minggu depan (+7 hari)?\nMinggu berjalan akan otomatis menjadi Minggu Lalu.")) {
-    const curDate = parseDateYMD(state.reportDate);
-    const nextWeekDate = addDays(curDate, 7);
-    state.reportDate = formatDateYMD(nextWeekDate);
-    reportDateInput.value = state.reportDate;
-    dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
+// Weekly roll-over feature (manual push +7 hari)
+const btnRollWeek = document.getElementById("btnRollWeek");
+if (btnRollWeek) {
+  btnRollWeek.addEventListener("click", () => {
+    if (confirm("Geser tanggal laporan ke Senin minggu depan (+7 hari)?\nMinggu berjalan akan otomatis menjadi Minggu Lalu.")) {
+      const curDate = parseDateYMD(state.reportDate);
+      const nextWeekDate = addDays(curDate, 7);
+      state.reportDate = formatDateYMD(nextWeekDate);
+      reportDateInput.value = state.reportDate;
+      dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
 
-    pruneOldDatabaseHistory();
-    renderWeeklyComparison();
-    recalculateAchievement();
-    saveLocalState();
-    saveToCloud(true);
-    updateWhatsAppOutput();
-    showToast("Kalender bergeser ke minggu baru! 📅✨");
-  }
-});
+      pruneOldDatabaseHistory();
+      renderWeeklyComparison();
+      recalculateAchievement();
+      saveLocalState();
+      saveToCloud(true);
+      updateWhatsAppOutput();
+      showToast("Kalender bergeser ke minggu baru (+7 hari)! 📅✨");
+    }
+  });
+}
+
+// Undo weekly roll-over feature (-7 hari)
+const btnUnrollWeek = document.getElementById("btnUnrollWeek");
+if (btnUnrollWeek) {
+  btnUnrollWeek.addEventListener("click", () => {
+    if (confirm("Kembalikan / mundurkan kalender laporan 1 minggu (-7 hari)?")) {
+      const curDate = parseDateYMD(state.reportDate);
+      const prevWeekDate = addDays(curDate, -7);
+      state.reportDate = formatDateYMD(prevWeekDate);
+      reportDateInput.value = state.reportDate;
+      dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
+
+      if (state.salesByDate[state.reportDate]) {
+        state.sales = state.salesByDate[state.reportDate];
+        inputSales.value = state.sales;
+      }
+
+      pruneOldDatabaseHistory();
+      renderWeeklyComparison();
+      recalculateAT();
+      recalculateAchievement();
+      saveLocalState();
+      saveToCloud(true);
+      updateWhatsAppOutput();
+      showToast("↩ Kalender berhasil dimundurkan 1 minggu!");
+    }
+  });
+}
 
 // Cloud Sync & File Actions
 document.getElementById("btnCloudSave").addEventListener("click", () => {
@@ -916,19 +946,8 @@ function cleanDailyForm() {
 
     // Reset sub-items to blank
     state.categories.forEach(cat => {
-      if (cat.name === "MO") {
-        cat.qty = "-";
-        cat.nominal = "";
-      } else if (cat.name === "Merchandise") {
-        cat.qty = "-";
-        cat.nominal = "-";
-      } else if (cat.name === "KM") {
-        cat.qty = "";
-        cat.nominal = "";
-      } else {
-        cat.qty = "";
-        cat.nominal = "";
-      }
+      cat.qty = "";
+      cat.nominal = "";
       cat.subItems = [];
     });
 

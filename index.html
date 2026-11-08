@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.3.0">
+  <link rel="stylesheet" href="style.css?v=2.3.1">
   <!-- Tesseract.js for client-side OCR (Runs 100% in browser, completely free & offline-ready after load) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -191,9 +191,14 @@
     <section class="card weekly-card">
       <div class="section-title">
         <span>📅 Compare Sales (Minggu Lalu vs Minggu Ini)</span>
-        <button type="button" class="btn-ghost-sm" id="btnRollWeek" title="Geser Minggu Ini jadi Minggu Lalu">
-          ⬆ Arsip ke Last Week
-        </button>
+        <div class="weekly-btn-group">
+          <button type="button" class="btn-ghost-sm" id="btnUnrollWeek" title="Kembalikan / mundurkan kalender 1 minggu (-7 hari)">
+            ↩ Undo
+          </button>
+          <button type="button" class="btn-ghost-sm" id="btnRollWeek" title="Geser Minggu Ini jadi Minggu Lalu (+7 hari)">
+            ⬆ Arsip ke Last Week
+          </button>
+        </div>
       </div>
 
       <!-- Last Week -->
@@ -305,6 +310,6 @@
     </footer>
   </div>
 
-  <script src="app.js?v=2.3.0"></script>
+  <script src="app.js?v=2.3.1"></script>
 </body>
 </html>

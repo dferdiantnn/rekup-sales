@@ -10,8 +10,8 @@
     { "id": "Toast", "name": "Toast", "desc": "Roti Panggang", "qty": 8, "nominal": "144.350", "subItems": [] },
     { "id": "KM", "name": "KM", "desc": "Kenangan Manis", "qty": 3, "nominal": "52.000", "subItems": [] },
     { "id": "PAHE", "name": "PAHE", "desc": "Paket Hemat", "qty": 8, "nominal": "146.100", "subItems": [] },
-    { "id": "MO", "name": "MO", "desc": "Make Order", "qty": "-", "nominal": "", "subItems": [] },
-    { "id": "Merchandise", "name": "Merchandise", "desc": "Tumbler, Biji Kopi, dll", "qty": "-", "nominal": "-", "subItems": [] }
+    { "id": "MO", "name": "MO", "desc": "Make Order", "qty": "", "nominal": "", "subItems": [] },
+    { "id": "Merchandise", "name": "Merchandise", "desc": "Tumbler, Biji Kopi, dll", "qty": "", "nominal": "", "subItems": [] }
   ],
   "salesByDate": {
     "2026-10-26": "6.042.960",
@@ -32,5 +32,5 @@
   "targetMonth": "November",
   "targetAmount": "-",
   "achievement": "52.218.060",
-  "updatedAt": "2026-11-09T02:37:00.000Z"
+  "updatedAt": "2026-11-09T02:44:00.000Z"
 }
