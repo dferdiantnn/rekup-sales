@@ -10,18 +10,12 @@ const MONTH_NAMES_ID = [
 // Cloud Endpoint: Google Firebase Realtime Database (100% Free Google Spark Plan)
 const FIREBASE_DB_URL = "https://rekup-sales-default-rtdb.asia-southeast1.firebasedatabase.app/rekup_sales.json";
 
-// Initial historical sales by date
+// Initial historical sales by date (Disimpan di Cloud Firebase)
 const DEFAULT_SALES_BY_DATE = {
-  // Minggu 26 Okt - 1 Nov 2026 (Last Week)
-  "2026-10-26": "6.042.960", // Senin
-  "2026-10-27": "6.360.870", // Selasa
-  "2026-10-28": "5.247.960", // Rabu
-  "2026-10-29": "6.097.250", // Kamis
-  "2026-10-30": "6.805.570", // Jum'at
-  "2026-10-31": "8.067.690", // Sabtu
+  // 1 Nov 2026 (Untuk kalkulasi Target & Achievement bulan November)
   "2026-11-01": "7.051.820", // Minggu
   
-  // Minggu 2 Nov - 8 Nov 2026 (This Week)
+  // Minggu 2 Nov - 8 Nov 2026 (Minggu Lalu / Last Week)
   "2026-11-02": "6.387.210", // Senin
   "2026-11-03": "7.246.840", // Selasa
   "2026-11-04": "6.068.030", // Rabu
@@ -31,23 +25,23 @@ const DEFAULT_SALES_BY_DATE = {
   "2026-11-08": "5.881.120"  // Minggu
 };
 
-// Initial Categories (Default sesuai struk 08 November)
+// Initial Categories (Default form harian)
 const DEFAULT_CATEGORIES = [
-  { id: "CR", name: "CR", desc: "Choux / Croissant", qty: 6, nominal: "65.300", subItems: [] },
-  { id: "Basic Food", name: "Basic Food", desc: "Makanan Pokok / Nasi", qty: 10, nominal: "173.000", subItems: [] },
-  { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: 8, nominal: "144.350", subItems: [] },
-  { id: "KM", name: "KM", desc: "Kenangan Manis", qty: 3, nominal: "52.000", subItems: [] },
-  { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: 8, nominal: "146.100", subItems: [] },
+  { id: "CR", name: "CR", desc: "Choux / Croissant", qty: "", nominal: "", subItems: [] },
+  { id: "Basic Food", name: "Basic Food", desc: "Makanan Pokok / Nasi", qty: "", nominal: "", subItems: [] },
+  { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: "", nominal: "", subItems: [] },
+  { id: "KM", name: "KM", desc: "Kenangan Manis", qty: "", nominal: "", subItems: [] },
+  { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: "", nominal: "", subItems: [] },
   { id: "MO", name: "MO", desc: "Make Order", qty: "-", nominal: "", subItems: [] },
   { id: "Merchandise", name: "Merchandise", desc: "Tumbler, Biji Kopi, dll", qty: "-", nominal: "-", subItems: [] }
 ];
 
 const DEFAULT_STATE = {
   storeName: "KK SPBU PUSPITEK",
-  reportDate: "2026-11-08", // Minggu, 08 November 2026
-  sales: "5.881.120",
-  adt: 168,
-  at: "35.007",
+  reportDate: "2026-11-09", // Periode berjalan 9-15 Nov 2026
+  sales: "",
+  adt: "",
+  at: "",
   categories: DEFAULT_CATEGORIES,
   salesByDate: DEFAULT_SALES_BY_DATE,
   targetMonth: "November",
@@ -155,6 +149,32 @@ function loadLocalState() {
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
 
+// Hapus histori minggu lama yang tidak terpakai dari database (hanya simpan last week & bulan berjalan)
+function pruneOldDatabaseHistory() {
+  if (!state.salesByDate) return false;
+  const curDate = parseDateYMD(state.reportDate || "2026-11-09");
+  const thisMon = getMondayOfDate(curDate);
+  const lastMon = addDays(thisMon, -7);
+  
+  // Tanggal terlama yang disimpan: tanggal terkecil antara awal bulan berjalan dan Senin minggu lalu
+  const curMonthStart = new Date(curDate.getFullYear(), curDate.getMonth(), 1);
+  const minKeepDate = lastMon < curMonthStart ? lastMon : curMonthStart;
+  const minKeepStr = formatDateYMD(minKeepDate);
+
+  let purged = false;
+  Object.keys(state.salesByDate).forEach(dStr => {
+    if (dStr < minKeepStr) {
+      delete state.salesByDate[dStr];
+      purged = true;
+    }
+  });
+
+  if (purged) {
+    saveLocalState();
+  }
+  return purged;
+}
+
 function saveLocalState() {
   try {
     localStorage.setItem("rekup_sales_state_v2", JSON.stringify(state));
@@ -232,6 +252,7 @@ async function loadFromCloud(silent = false) {
           ...cloudData,
           salesByDate: { ...state.salesByDate, ...(cloudData.salesByDate || {}) }
         };
+        pruneOldDatabaseHistory();
         saveLocalState();
         renderAll();
 
@@ -268,6 +289,7 @@ function initFirebaseLiveListener() {
               ...newData,
               salesByDate: { ...state.salesByDate, ...(newData.salesByDate || {}) }
             };
+            pruneOldDatabaseHistory();
             saveLocalState();
             renderAll();
             showToast("⚡ Data ter-update live dari perangkat lain!");
@@ -517,6 +539,28 @@ function renderWeeklyComparison() {
     thisWeekDaysContainer.appendChild(card);
   });
   thisWeekSubtotalEl.innerText = `Rp. ${formatRupiah(weekData.thisWeekSubtotal)}`;
+
+  // Attach dynamic day edit listeners
+  const attachDayListeners = (container) => {
+    container.querySelectorAll("input[data-date]").forEach(inp => {
+      inp.addEventListener("input", (e) => {
+        const dStr = e.target.dataset.date;
+        const rawVal = e.target.value.trim();
+        state.salesByDate[dStr] = rawVal ? formatRupiah(rawVal) : "";
+        saveLocalState();
+        recalculateAchievement();
+        updateWhatsAppOutput();
+        const wData = getWeekData();
+        lastWeekSubtotalEl.innerText = `Rp. ${formatRupiah(wData.lastWeekSubtotal)}`;
+        thisWeekSubtotalEl.innerText = `Rp. ${formatRupiah(wData.thisWeekSubtotal)}`;
+      });
+      inp.addEventListener("blur", () => {
+        saveToCloud(true);
+      });
+    });
+  };
+  attachDayListeners(lastWeekDaysContainer);
+  attachDayListeners(thisWeekDaysContainer);
 }
 
 // Generate exact WhatsApp Report Output
@@ -740,6 +784,7 @@ reportDateInput.addEventListener("change", (e) => {
     inputSales.value = state.sales;
   }
 
+  pruneOldDatabaseHistory();
   renderWeeklyComparison();
   recalculateAT();
   recalculateAchievement();
@@ -775,9 +820,11 @@ document.getElementById("btnRollWeek").addEventListener("click", () => {
     reportDateInput.value = state.reportDate;
     dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
 
+    pruneOldDatabaseHistory();
     renderWeeklyComparison();
     recalculateAchievement();
     saveLocalState();
+    saveToCloud(true);
     updateWhatsAppOutput();
     showToast("Kalender bergeser ke minggu baru! 📅✨");
   }
@@ -1111,6 +1158,7 @@ function parseReceiptText(text) {
     reportDateInput.value = foundDate;
     dateFormattedPreview.innerText = formatDateIndo(foundDate);
     detectedDate.innerText = formatDateIndo(foundDate);
+    pruneOldDatabaseHistory();
   }
 
   if (foundSales) {
@@ -1190,10 +1238,61 @@ function initTheme() {
   }
 }
 
+// ==========================================
+// Live Realtime Clock & Date Sync Engine
+// ==========================================
+
+function updateLiveClock() {
+  const now = new Date();
+  const dayName = DAYS_NAMES[now.getDay()];
+  const dateNum = String(now.getDate()).padStart(2, '0');
+  const monthName = MONTH_NAMES_ID[now.getMonth()];
+  const year = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+
+  const el = document.getElementById("liveClockDisplay");
+  if (el) {
+    el.textContent = `${dayName}, ${dateNum} ${monthName} ${year} • ${hh}:${mm}:${ss} WIB`;
+  }
+}
+
 // Initial Run
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  pruneOldDatabaseHistory();
   renderAll();
+
+  // Realtime Live Clock
+  updateLiveClock();
+  setInterval(updateLiveClock, 1000);
+
+  // Sync to today's date
+  const btnSyncToday = document.getElementById("btnSyncToday");
+  if (btnSyncToday) {
+    btnSyncToday.addEventListener("click", () => {
+      const today = new Date();
+      const todayStr = formatDateYMD(today);
+      state.reportDate = todayStr;
+      reportDateInput.value = todayStr;
+      dateFormattedPreview.innerText = formatDateIndo(todayStr);
+
+      if (state.salesByDate[todayStr]) {
+        state.sales = state.salesByDate[todayStr];
+        inputSales.value = state.sales;
+      } else {
+        state.sales = "";
+        inputSales.value = "";
+      }
+
+      pruneOldDatabaseHistory();
+      renderAll();
+      saveToCloud(true);
+      showToast(`Tanggal laporan diselaraskan: ${formatDateIndo(todayStr)} 📅`);
+    });
+  }
+
   // Auto sync cloud on start
   loadFromCloud(true);
   // Realtime Live Sync listener across devices

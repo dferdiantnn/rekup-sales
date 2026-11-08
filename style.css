@@ -332,6 +332,92 @@ body {
   color: var(--color-success);
 }
 
+/* Live Realtime Clock Bar */
+.live-clock-bar {
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-clock-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.live-pulse {
+  width: 9px;
+  height: 9px;
+  background-color: #EF4444;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 rgba(239, 68, 68, 0.4);
+  animation: liveBlink 1.4s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes liveBlink {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.live-badge-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: #FEE2E2;
+  color: #B91C1C;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .live-badge-label {
+  background: #3B1C1D;
+  color: #F87171;
+}
+
+.live-time-text {
+  font-size: 12.5px;
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-live-today {
+  background: #FFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.btn-live-today:hover {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+}
+
+[data-theme="dark"] .btn-live-today {
+  background: #27211C;
+  border-color: #383029;
+  color: #E09163;
+}
+
 /* Form inputs */
 .form-row {
   display: flex;

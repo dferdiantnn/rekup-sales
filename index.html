@@ -56,6 +56,18 @@
 
     <!-- Store Profile & Date Card -->
     <section class="card config-card">
+      <!-- Live Realtime Clock Widget -->
+      <div class="live-clock-bar">
+        <div class="live-clock-left">
+          <span class="live-pulse"></span>
+          <span class="live-badge-label">REALTIME</span>
+          <strong class="live-time-text" id="liveClockDisplay">Senin, 09 November 2026 • 02:22:00 WIB</strong>
+        </div>
+        <button type="button" class="btn-live-today" id="btnSyncToday" title="Set tanggal laporan ke hari ini">
+          📅 Hari Ini
+        </button>
+      </div>
+
       <div class="form-row">
         <div class="form-group flex-2">
           <label for="storeName">Nama Outlet / Store</label>
@@ -69,7 +81,7 @@
           <input type="date" id="reportDate">
         </div>
       </div>
-      <div class="date-preview-pill" id="dateFormattedPreview">Rabu, 04 November 2026</div>
+      <div class="date-preview-pill" id="dateFormattedPreview">Senin, 09 November 2026</div>
     </section>
 
     <!-- OCR Scanner Box -->
