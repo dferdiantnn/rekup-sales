@@ -345,7 +345,10 @@ function getWeekData() {
   let lastWeekSubtotal = 0;
   dayOrder.forEach((day, idx) => {
     const dStr = formatDateYMD(addDays(lastMon, idx));
-    const val = state.salesByDate[dStr] || "";
+    let val = state.salesByDate[dStr] || "";
+    if (dStr === state.reportDate && state.sales) {
+      val = state.sales;
+    }
     lastWeekDays[day] = { dateStr: dStr, value: val };
     lastWeekSubtotal += cleanNum(val);
   });
@@ -354,7 +357,10 @@ function getWeekData() {
   let thisWeekSubtotal = 0;
   dayOrder.forEach((day, idx) => {
     const dStr = formatDateYMD(addDays(thisMon, idx));
-    const val = state.salesByDate[dStr] || "";
+    let val = state.salesByDate[dStr] || "";
+    if (dStr === state.reportDate && state.sales) {
+      val = state.sales;
+    }
     thisWeekDays[day] = { dateStr: dStr, value: val };
     thisWeekSubtotal += cleanNum(val);
   });
@@ -379,6 +385,7 @@ function recalculateAchievement() {
   const curYear = curDate.getFullYear();
   const curMonth = curDate.getMonth(); // 0-indexed
   const curDayNum = curDate.getDate();
+  const todayYMD = formatDateYMD(curDate);
 
   // Target month name
   state.targetMonth = MONTH_NAMES_ID[curMonth];
@@ -390,15 +397,11 @@ function recalculateAchievement() {
   for (let day = 1; day <= curDayNum; day++) {
     const d = new Date(curYear, curMonth, day);
     const dStr = formatDateYMD(d);
-    if (state.salesByDate[dStr]) {
+    if (dStr === todayYMD && state.sales) {
+      totalMonthSales += cleanNum(state.sales);
+    } else if (state.salesByDate[dStr]) {
       totalMonthSales += cleanNum(state.salesByDate[dStr]);
     }
-  }
-
-  // If reportDate has a sales value in state.sales, ensure it's included
-  const todayYMD = formatDateYMD(curDate);
-  if (!state.salesByDate[todayYMD] && state.sales) {
-    totalMonthSales += cleanNum(state.sales);
   }
 
   state.achievement = formatRupiah(totalMonthSales);
@@ -435,6 +438,13 @@ function renderAll() {
   storeNameInput.value = state.storeName || "KK SPBU PUSPITEK";
   reportDateInput.value = state.reportDate || "2026-11-08";
   dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
+
+  // Auto-sync: ensure state.sales is assigned to its corresponding day in salesByDate
+  if (state.sales && state.reportDate) {
+    state.salesByDate[state.reportDate] = state.sales;
+  } else if (!state.sales && state.salesByDate && state.salesByDate[state.reportDate]) {
+    state.sales = state.salesByDate[state.reportDate];
+  }
 
   inputSales.value = state.sales || "";
   inputAdt.value = state.adt || "";
@@ -552,7 +562,16 @@ function renderWeeklyComparison() {
       inp.addEventListener("input", (e) => {
         const dStr = e.target.dataset.date;
         const rawVal = e.target.value.trim();
-        state.salesByDate[dStr] = rawVal ? formatRupiah(rawVal) : "";
+        const formatted = rawVal ? formatRupiah(rawVal) : "";
+        state.salesByDate[dStr] = formatted;
+
+        // Auto sync: If user edits the day corresponding to reportDate, update Sales (Total Penjualan)
+        if (dStr === state.reportDate) {
+          state.sales = formatted;
+          inputSales.value = formatted;
+          recalculateAT();
+        }
+
         saveLocalState();
         recalculateAchievement();
         updateWhatsAppOutput();
