@@ -12,10 +12,16 @@ const FIREBASE_DB_URL = "https://rekup-sales-default-rtdb.asia-southeast1.fireba
 
 // Initial historical sales by date (Disimpan di Cloud Firebase)
 const DEFAULT_SALES_BY_DATE = {
-  // 1 Nov 2026 (Untuk kalkulasi Target & Achievement bulan November)
+  // Minggu 26 Okt - 1 Nov 2026 (Subtotal: 45.674.120)
+  "2026-10-26": "6.042.960", // Senin
+  "2026-10-27": "6.360.870", // Selasa
+  "2026-10-28": "5.247.960", // Rabu
+  "2026-10-29": "6.097.250", // Kamis
+  "2026-10-30": "6.805.570", // Jum'at
+  "2026-10-31": "8.067.690", // Sabtu
   "2026-11-01": "7.051.820", // Minggu
   
-  // Minggu 2 Nov - 8 Nov 2026 (Minggu Lalu / Last Week)
+  // Minggu 2 Nov - 8 Nov 2026 (Subtotal: 45.166.240)
   "2026-11-02": "6.387.210", // Senin
   "2026-11-03": "7.246.840", // Selasa
   "2026-11-04": "6.068.030", // Rabu
@@ -25,23 +31,23 @@ const DEFAULT_SALES_BY_DATE = {
   "2026-11-08": "5.881.120"  // Minggu
 };
 
-// Initial Categories (Default form harian)
+// Initial Categories (Default sesuai struk closingan 08 November)
 const DEFAULT_CATEGORIES = [
-  { id: "CR", name: "CR", desc: "Choux / Croissant", qty: "", nominal: "", subItems: [] },
-  { id: "Basic Food", name: "Basic Food", desc: "Makanan Pokok / Nasi", qty: "", nominal: "", subItems: [] },
-  { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: "", nominal: "", subItems: [] },
-  { id: "KM", name: "KM", desc: "Kenangan Manis", qty: "", nominal: "", subItems: [] },
-  { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: "", nominal: "", subItems: [] },
+  { id: "CR", name: "CR", desc: "Choux / Croissant", qty: 6, nominal: "65.300", subItems: [] },
+  { id: "Basic Food", name: "Basic Food", desc: "Makanan Pokok / Nasi", qty: 10, nominal: "173.000", subItems: [] },
+  { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: 8, nominal: "144.350", subItems: [] },
+  { id: "KM", name: "KM", desc: "Kenangan Manis", qty: 3, nominal: "52.000", subItems: [] },
+  { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: 8, nominal: "146.100", subItems: [] },
   { id: "MO", name: "MO", desc: "Make Order", qty: "-", nominal: "", subItems: [] },
   { id: "Merchandise", name: "Merchandise", desc: "Tumbler, Biji Kopi, dll", qty: "-", nominal: "-", subItems: [] }
 ];
 
 const DEFAULT_STATE = {
   storeName: "KK SPBU PUSPITEK",
-  reportDate: "2026-11-09", // Periode berjalan 9-15 Nov 2026
-  sales: "",
-  adt: "",
-  at: "",
+  reportDate: "2026-11-08", // Sesuai struk closingan terakhir (Minggu, 08 Nov)
+  sales: "5.881.120",
+  adt: 168,
+  at: "35.007",
   categories: DEFAULT_CATEGORIES,
   salesByDate: DEFAULT_SALES_BY_DATE,
   targetMonth: "November",
@@ -149,16 +155,16 @@ function loadLocalState() {
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
 
-// Hapus histori minggu lama yang tidak terpakai dari database (hanya simpan last week & bulan berjalan)
+// Hapus histori lama yang melebihi batas 2 minggu & bulan berjalan
 function pruneOldDatabaseHistory() {
   if (!state.salesByDate) return false;
-  const curDate = parseDateYMD(state.reportDate || "2026-11-09");
+  const curDate = parseDateYMD(state.reportDate || "2026-11-08");
   const thisMon = getMondayOfDate(curDate);
-  const lastMon = addDays(thisMon, -7);
-  
-  // Tanggal terlama yang disimpan: tanggal terkecil antara awal bulan berjalan dan Senin minggu lalu
+  const twoWeeksAgoMon = addDays(thisMon, -14);
   const curMonthStart = new Date(curDate.getFullYear(), curDate.getMonth(), 1);
-  const minKeepDate = lastMon < curMonthStart ? lastMon : curMonthStart;
+
+  // Batas tanggal terlama yang disimpan: yang paling awal antara 2 minggu lalu atau awal bulan
+  const minKeepDate = twoWeeksAgoMon < curMonthStart ? twoWeeksAgoMon : curMonthStart;
   const minKeepStr = formatDateYMD(minKeepDate);
 
   let purged = false;
@@ -1243,6 +1249,8 @@ function initTheme() {
 // ==========================================
 
 function updateLiveClock() {
+  const el = document.getElementById("liveClockDisplay");
+  if (!el) return;
   const now = new Date();
   const dayName = DAYS_NAMES[now.getDay()];
   const dateNum = String(now.getDate()).padStart(2, '0');
@@ -1252,21 +1260,18 @@ function updateLiveClock() {
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
 
-  const el = document.getElementById("liveClockDisplay");
-  if (el) {
-    el.textContent = `${dayName}, ${dateNum} ${monthName} ${year} • ${hh}:${mm}:${ss} WIB`;
-  }
+  el.textContent = `${dayName}, ${dateNum} ${monthName} ${year} • ${hh}:${mm}:${ss} WIB`;
 }
 
-// Initial Run
-document.addEventListener("DOMContentLoaded", () => {
+// Start ticking immediately
+setInterval(updateLiveClock, 1000);
+
+// App Initializer
+function initApp() {
   initTheme();
   pruneOldDatabaseHistory();
   renderAll();
-
-  // Realtime Live Clock
   updateLiveClock();
-  setInterval(updateLiveClock, 1000);
 
   // Sync to today's date
   const btnSyncToday = document.getElementById("btnSyncToday");
@@ -1297,4 +1302,10 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFromCloud(true);
   // Realtime Live Sync listener across devices
   initFirebaseLiveListener();
-});
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}

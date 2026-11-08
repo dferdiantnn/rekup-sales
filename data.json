@@ -1,19 +1,25 @@
 {
   "storeName": "KK SPBU PUSPITEK",
-  "reportDate": "2026-11-09",
-  "sales": "",
-  "adt": "",
-  "at": "",
+  "reportDate": "2026-11-08",
+  "sales": "5.881.120",
+  "adt": 168,
+  "at": "35.007",
   "categories": [
-    { "id": "CR", "name": "CR", "desc": "Choux / Croissant", "qty": "", "nominal": "", "subItems": [] },
-    { "id": "Basic Food", "name": "Basic Food", "desc": "Makanan Pokok / Nasi", "qty": "", "nominal": "", "subItems": [] },
-    { "id": "Toast", "name": "Toast", "desc": "Roti Panggang", "qty": "", "nominal": "", "subItems": [] },
-    { "id": "KM", "name": "KM", "desc": "Kenangan Manis", "qty": "", "nominal": "", "subItems": [] },
-    { "id": "PAHE", "name": "PAHE", "desc": "Paket Hemat", "qty": "", "nominal": "", "subItems": [] },
+    { "id": "CR", "name": "CR", "desc": "Choux / Croissant", "qty": 6, "nominal": "65.300", "subItems": [] },
+    { "id": "Basic Food", "name": "Basic Food", "desc": "Makanan Pokok / Nasi", "qty": 10, "nominal": "173.000", "subItems": [] },
+    { "id": "Toast", "name": "Toast", "desc": "Roti Panggang", "qty": 8, "nominal": "144.350", "subItems": [] },
+    { "id": "KM", "name": "KM", "desc": "Kenangan Manis", "qty": 3, "nominal": "52.000", "subItems": [] },
+    { "id": "PAHE", "name": "PAHE", "desc": "Paket Hemat", "qty": 8, "nominal": "146.100", "subItems": [] },
     { "id": "MO", "name": "MO", "desc": "Make Order", "qty": "-", "nominal": "", "subItems": [] },
     { "id": "Merchandise", "name": "Merchandise", "desc": "Tumbler, Biji Kopi, dll", "qty": "-", "nominal": "-", "subItems": [] }
   ],
   "salesByDate": {
+    "2026-10-26": "6.042.960",
+    "2026-10-27": "6.360.870",
+    "2026-10-28": "5.247.960",
+    "2026-10-29": "6.097.250",
+    "2026-10-30": "6.805.570",
+    "2026-10-31": "8.067.690",
     "2026-11-01": "7.051.820",
     "2026-11-02": "6.387.210",
     "2026-11-03": "7.246.840",
@@ -26,5 +32,5 @@
   "targetMonth": "November",
   "targetAmount": "-",
   "achievement": "52.218.060",
-  "updatedAt": "2026-11-09T02:28:00.000Z"
+  "updatedAt": "2026-11-09T02:37:00.000Z"
 }
