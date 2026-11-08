@@ -7,8 +7,8 @@ const MONTH_NAMES_ID = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ];
 
-// Cloud Endpoint (Shared cross-device database)
-const CLOUD_API_URL = "https://api.restful-api.dev/objects/ff808181a09d98f701a1bc684f526803";
+// Cloud Endpoint: Google Firebase Realtime Database (100% Free Google Spark Plan)
+const FIREBASE_DB_URL = "https://rekup-sales-default-rtdb.asia-southeast1.firebasedatabase.app/rekup_sales.json";
 
 // Initial historical sales by date
 const DEFAULT_SALES_BY_DATE = {
@@ -163,62 +163,120 @@ function saveLocalState() {
   }
 }
 
-// Save to Cloud & Download Backup
-function saveToCloud(silent = false) {
+// Save to Firebase Realtime Database
+async function saveToCloud(silent = false) {
   saveLocalState();
-  const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  state.lastCloudSync = timeStr;
-
   const indicator = document.getElementById("cloudIndicator");
   const title = document.getElementById("cloudStatusTitle");
   const lastSync = document.getElementById("cloudLastSync");
 
-  indicator.textContent = "🟢";
-  title.textContent = "Data Berhasil Disimpan!";
-  lastSync.textContent = `Tersimpan di memori & server (${timeStr} WIB)`;
-
   if (!silent) {
-    // Download JSON file backup for cross-device portability
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `rekup_sales_${state.reportDate || "backup"}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    indicator.textContent = "🟡";
+    title.textContent = "Menyimpan ke Firebase...";
+  }
 
-    showToast("✓ Data tersimpan & file rekup_sales.json terunduh! 💾✨");
+  try {
+    const payload = {
+      ...state,
+      updatedAt: new Date().toISOString()
+    };
+
+    const res = await fetch(FIREBASE_DB_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      state.lastCloudSync = timeStr;
+
+      indicator.textContent = "🟢";
+      title.textContent = "Cloud Terhubung (Firebase Live)";
+      lastSync.textContent = `Tersinkron: ${timeStr} WIB (Semua HP/Tablet)`;
+
+      if (!silent) showToast("✓ Data berhasil disimpan ke Firebase Cloud! ☁️✨");
+      return true;
+    } else {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  } catch (err) {
+    console.warn("Firebase save error:", err);
+    indicator.textContent = "🟠";
+    title.textContent = "Tersimpan di HP (Offline)";
+    lastSync.textContent = "Gagal kirim ke cloud, data tersimpan di HP.";
+    if (!silent) showToast("⚠️ Tidak bisa konek cloud, data tersimpan di HP kamu.");
+    return false;
   }
 }
 
-// Fetch from Baseline Server / File Picker
+// Fetch from Firebase Realtime Database
 async function loadFromCloud(silent = false) {
-  const jsonFileInput = document.getElementById("jsonFileInput");
+  const indicator = document.getElementById("cloudIndicator");
+  const title = document.getElementById("cloudStatusTitle");
+  const lastSync = document.getElementById("cloudLastSync");
+
   if (!silent) {
-    if (confirm("Ingin memulihkan data dari file JSON cadangan di HP?\n\n- Klik OK untuk memilih file JSON dari HP\n- Klik Cancel untuk menarik data bawaan dari server online")) {
-      jsonFileInput.value = "";
-      jsonFileInput.click();
-      return;
-    }
+    indicator.textContent = "🟡";
+    title.textContent = "Mengambil data Firebase...";
   }
 
-  // Fetch baseline ./data.json from server
   try {
-    const res = await fetch("./data.json?t=" + Date.now());
+    const res = await fetch(FIREBASE_DB_URL + "?t=" + Date.now());
     if (res.ok) {
-      const serverData = await res.json();
-      state = {
-        ...state,
-        ...serverData,
-        salesByDate: { ...state.salesByDate, ...(serverData.salesByDate || {}) }
-      };
-      saveLocalState();
-      renderAll();
-      if (!silent) showToast("✓ Data terbaru dari server berhasil dimuat! 🔄");
+      const cloudData = await res.json();
+      if (cloudData) {
+        state = {
+          ...state,
+          ...cloudData,
+          salesByDate: { ...state.salesByDate, ...(cloudData.salesByDate || {}) }
+        };
+        saveLocalState();
+        renderAll();
+
+        indicator.textContent = "🟢";
+        title.textContent = "Cloud Terhubung (Firebase Live)";
+        lastSync.textContent = cloudData.updatedAt
+          ? `Tersinkron: ${new Date(cloudData.updatedAt).toLocaleTimeString('id-ID')} WIB (Multi-device)`
+          : "Tersinkron dengan Cloud";
+
+        if (!silent) showToast("✓ Data terbaru dari Firebase berhasil dimuat! 🔄");
+        return true;
+      }
     }
   } catch (err) {
-    console.warn("Server baseline fetch error:", err);
+    console.warn("Firebase fetch error:", err);
+    if (!silent) showToast("Gagal mengambil data dari cloud.");
+  }
+  return false;
+}
+
+// Live SSE Stream: Auto update when another phone saves!
+function initFirebaseLiveListener() {
+  if (typeof EventSource === "undefined") return;
+  try {
+    const sse = new EventSource(FIREBASE_DB_URL);
+    sse.addEventListener("put", (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload && payload.data) {
+          const newData = payload.data;
+          if (newData.salesByDate || newData.sales) {
+            state = {
+              ...state,
+              ...newData,
+              salesByDate: { ...state.salesByDate, ...(newData.salesByDate || {}) }
+            };
+            saveLocalState();
+            renderAll();
+            showToast("⚡ Data ter-update live dari perangkat lain!");
+          }
+        }
+      } catch (err) {}
+    });
+  } catch (err) {
+    console.warn("SSE Listener error:", err);
   }
 }
 
@@ -1092,4 +1150,6 @@ document.addEventListener("DOMContentLoaded", () => {
   renderAll();
   // Auto sync cloud on start
   loadFromCloud(true);
+  // Realtime Live Sync listener across devices
+  initFirebaseLiveListener();
 });

@@ -36,20 +36,19 @@
         <div class="cloud-status-badge">
           <span class="cloud-indicator" id="cloudIndicator">🟢</span>
           <div>
-            <strong id="cloudStatusTitle">Penyimpanan Online & Backup</strong>
-            <small id="cloudLastSync">Tersimpan otomatis di memori & server online</small>
+            <strong id="cloudStatusTitle">Cloud Terhubung (Firebase Live)</strong>
+            <small id="cloudLastSync">Multi-device sinkron otomatis (HP, Tablet, Laptop)</small>
           </div>
         </div>
         <div class="cloud-actions">
-          <button type="button" class="btn-cloud-action btn-cloud-save" id="btnCloudSave" title="Unduh file arsip data.json & simpan">
-            ☁️ Simpan / Unduh
+          <button type="button" class="btn-cloud-action btn-cloud-save" id="btnCloudSave" title="Upload dan simpan data ke Firebase">
+            ☁️ Simpan Online
           </button>
-          <button type="button" class="btn-cloud-action btn-cloud-load" id="btnCloudLoad" title="Muat data dari file atau server online">
-            🔄 Tarik / Pulihkan
+          <button type="button" class="btn-cloud-action btn-cloud-load" id="btnCloudLoad" title="Ambil data terbaru dari Firebase">
+            🔄 Tarik Data
           </button>
         </div>
       </div>
-      <input type="file" id="jsonFileInput" accept=".json" class="hidden">
     </section>
 
     <!-- Store Profile & Date Card -->
