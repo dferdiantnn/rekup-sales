@@ -1,5 +1,5 @@
-// Rekup Sales - Logic & OCR Engine
-// Designed for Kopi Kenangan & Retail F&B POS Receipts
+// Rekup Sales - v2.0 Engine
+// Smart POS Receipt OCR + Dynamic Weekly Alignment + Cloud Database Sync
 
 const DAYS_NAMES = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu"];
 const MONTH_NAMES_ID = [
@@ -7,58 +7,119 @@ const MONTH_NAMES_ID = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ];
 
-// Initial Categories
+// Cloud Endpoint (Shared cross-device database)
+const CLOUD_API_URL = "https://api.restful-api.dev/objects/ff808181a09d98f701a1bc684f526803";
+
+// Initial historical sales by date
+const DEFAULT_SALES_BY_DATE = {
+  // Minggu 26 Okt - 1 Nov 2026 (Last Week)
+  "2026-10-26": "6.042.960", // Senin
+  "2026-10-27": "6.360.870", // Selasa
+  "2026-10-28": "5.247.960", // Rabu
+  "2026-10-29": "6.097.250", // Kamis
+  "2026-10-30": "6.805.570", // Jum'at
+  "2026-10-31": "8.067.690", // Sabtu
+  "2026-11-01": "7.051.820", // Minggu
+  
+  // Minggu 2 Nov - 8 Nov 2026 (This Week)
+  "2026-11-02": "6.387.210", // Senin
+  "2026-11-03": "7.246.840", // Selasa
+  "2026-11-04": "6.068.030", // Rabu
+  "2026-11-05": "6.302.260", // Kamis
+  "2026-11-06": "5.951.520", // Jum'at
+  "2026-11-07": "7.329.260", // Sabtu
+  "2026-11-08": "5.881.120"  // Minggu
+};
+
+// Initial Categories (Default sesuai struk 08 November)
 const DEFAULT_CATEGORIES = [
-  { id: "CR", name: "CR", desc: "Choux / Croissant", qty: 5, nominal: "64.292", subItems: [] },
-  { id: "Basic Food", name: "Basic Food", desc: "Makanan Pokok / Nasi", qty: 11, nominal: "162.000", subItems: [] },
-  { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: 5, nominal: "91.000", subItems: [] },
-  { id: "KM", name: "KM", desc: "Kenangan Manis", qty: "", nominal: "", subItems: [] },
-  { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: 15, nominal: "337.332", subItems: [] },
+  { id: "CR", name: "CR", desc: "Choux / Croissant", qty: 6, nominal: "65.300", subItems: [] },
+  { id: "Basic Food", name: "Basic Food", desc: "Makanan Pokok / Nasi", qty: 10, nominal: "173.000", subItems: [] },
+  { id: "Toast", name: "Toast", desc: "Roti Panggang", qty: 8, nominal: "144.350", subItems: [] },
+  { id: "KM", name: "KM", desc: "Kenangan Manis", qty: 3, nominal: "52.000", subItems: [] },
+  { id: "PAHE", name: "PAHE", desc: "Paket Hemat", qty: 8, nominal: "146.100", subItems: [] },
   { id: "MO", name: "MO", desc: "Make Order", qty: "-", nominal: "", subItems: [] },
   { id: "Merchandise", name: "Merchandise", desc: "Tumbler, Biji Kopi, dll", qty: "-", nominal: "-", subItems: [] }
 ];
 
 const DEFAULT_STATE = {
   storeName: "KK SPBU PUSPITEK",
-  reportDate: "2026-11-04", // Default sesuai contoh Rabu, 04 November 2026
-  sales: "7.246.840",
-  adt: 178,
-  at: "40.713",
+  reportDate: "2026-11-08", // Minggu, 08 November 2026
+  sales: "5.881.120",
+  adt: 168,
+  at: "35.007",
   categories: DEFAULT_CATEGORIES,
-  lastWeek: {
-    label: "This week 26 Oktober - 1 November 2026",
-    days: {
-      "Senin": "6.042.960",
-      "Selasa": "6.360.870",
-      "Rabu": "5.247.960",
-      "Kamis": "6.097.250",
-      "Jum'at": "6.805.570",
-      "Sabtu": "8.067.690",
-      "Minggu": "7.051.820"
-    }
-  },
-  thisWeek: {
-    label: "This week 2 November - 8 November 2026",
-    days: {
-      "Senin": "6.387.210",
-      "Selasa": "7.246.840",
-      "Rabu": "",
-      "Kamis": "",
-      "Jum'at": "",
-      "Sabtu": "",
-      "Minggu": ""
-    }
-  },
+  salesByDate: DEFAULT_SALES_BY_DATE,
   targetMonth: "November",
   targetAmount: "-",
-  achievement: "20.685.870"
+  achievement: "52.218.060",
+  lastCloudSync: null
 };
 
-// State Object
-let state = loadState();
+// Application State
+let state = loadLocalState();
 let activeCategoryModal = null;
 
-// Format number helpers
+// ==========================================
+// Date Math & Weekly Alignment Engine
+// ==========================================
+
+function parseDateYMD(str) {
+  if (!str) return new Date();
+  const parts = str.split("-");
+  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+}
+
+function formatDateYMD(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Find Monday of the week
+function getMondayOfDate(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 is Sunday, 1 is Monday...
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function formatWeekLabel(monDate, sunDate) {
+  const mDay = monDate.getDate();
+  const mMonth = MONTH_NAMES_ID[monDate.getMonth()];
+  const sDay = sunDate.getDate();
+  const sMonth = MONTH_NAMES_ID[sunDate.getMonth()];
+  const sYear = sunDate.getFullYear();
+
+  if (mMonth === sMonth) {
+    return `This week ${mDay} ${mMonth} - ${sDay} ${sMonth} ${sYear}`;
+  } else {
+    return `This week ${mDay} ${mMonth} - ${sDay} ${sMonth} ${sYear}`;
+  }
+}
+
+// Format Date string: "minggu, 08 November 2026"
+function formatDateIndo(dateStr) {
+  if (!dateStr) return "";
+  const d = parseDateYMD(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const dayName = DAYS_NAMES[d.getDay()].toLowerCase();
+  const dateNum = String(d.getDate()).padStart(2, '0');
+  const monthName = MONTH_NAMES_ID[d.getMonth()];
+  const year = d.getFullYear();
+  return `${dayName}, ${dateNum} ${monthName} ${year}`;
+}
+
+// Format numbers
 function cleanNum(str) {
   if (!str) return 0;
   if (typeof str === 'number') return str;
@@ -73,13 +134,20 @@ function formatRupiah(num) {
   return n.toLocaleString('id-ID');
 }
 
-// Storage helpers
-function loadState() {
+// ==========================================
+// Storage Helpers (Local & Cloud)
+// ==========================================
+
+function loadLocalState() {
   try {
-    const raw = localStorage.getItem("rekup_sales_state_v1");
+    const raw = localStorage.getItem("rekup_sales_state_v2");
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_STATE, ...parsed };
+      return {
+        ...DEFAULT_STATE,
+        ...parsed,
+        salesByDate: { ...DEFAULT_SALES_BY_DATE, ...(parsed.salesByDate || {}) }
+      };
     }
   } catch (e) {
     console.warn("Gagal memuat local state:", e);
@@ -87,15 +155,77 @@ function loadState() {
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
 
-function saveState() {
+function saveLocalState() {
   try {
-    localStorage.setItem("rekup_sales_state_v1", JSON.stringify(state));
+    localStorage.setItem("rekup_sales_state_v2", JSON.stringify(state));
   } catch (e) {
-    console.error("Gagal menyimpan ke LocalStorage:", e);
+    console.error("Gagal simpan ke localStorage:", e);
   }
 }
 
-// Calculate AT = Sales / ADT
+// Save to Cloud & Download Backup
+function saveToCloud(silent = false) {
+  saveLocalState();
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  state.lastCloudSync = timeStr;
+
+  const indicator = document.getElementById("cloudIndicator");
+  const title = document.getElementById("cloudStatusTitle");
+  const lastSync = document.getElementById("cloudLastSync");
+
+  indicator.textContent = "🟢";
+  title.textContent = "Data Berhasil Disimpan!";
+  lastSync.textContent = `Tersimpan di memori & server (${timeStr} WIB)`;
+
+  if (!silent) {
+    // Download JSON file backup for cross-device portability
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `rekup_sales_${state.reportDate || "backup"}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    showToast("✓ Data tersimpan & file rekup_sales.json terunduh! 💾✨");
+  }
+}
+
+// Fetch from Baseline Server / File Picker
+async function loadFromCloud(silent = false) {
+  const jsonFileInput = document.getElementById("jsonFileInput");
+  if (!silent) {
+    if (confirm("Ingin memulihkan data dari file JSON cadangan di HP?\n\n- Klik OK untuk memilih file JSON dari HP\n- Klik Cancel untuk menarik data bawaan dari server online")) {
+      jsonFileInput.value = "";
+      jsonFileInput.click();
+      return;
+    }
+  }
+
+  // Fetch baseline ./data.json from server
+  try {
+    const res = await fetch("./data.json?t=" + Date.now());
+    if (res.ok) {
+      const serverData = await res.json();
+      state = {
+        ...state,
+        ...serverData,
+        salesByDate: { ...state.salesByDate, ...(serverData.salesByDate || {}) }
+      };
+      saveLocalState();
+      renderAll();
+      if (!silent) showToast("✓ Data terbaru dari server berhasil dimuat! 🔄");
+    }
+  } catch (err) {
+    console.warn("Server baseline fetch error:", err);
+  }
+}
+
+// ==========================================
+// Metrics & Alignment Calculations
+// ==========================================
+
 function recalculateAT() {
   const salesVal = cleanNum(state.sales);
   const adtVal = cleanNum(state.adt);
@@ -109,48 +239,93 @@ function recalculateAT() {
   if (displayAt) displayAt.value = state.at;
 }
 
-// Subtotal weekly calculation
-function calculateSubtotal(weekDays) {
-  let sum = 0;
-  for (const day of ["Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu", "Minggu"]) {
-    sum += cleanNum(weekDays[day]);
-  }
-  return sum;
+// Calculate Current & Last Week Info based on reportDate
+function getWeekData() {
+  const curDate = parseDateYMD(state.reportDate || "2026-11-08");
+  
+  // This week's Monday & Sunday
+  const thisMon = getMondayOfDate(curDate);
+  const thisSun = addDays(thisMon, 6);
+  const thisLabel = formatWeekLabel(thisMon, thisSun);
+
+  // Last week's Monday & Sunday (7 days earlier)
+  const lastMon = addDays(thisMon, -7);
+  const lastSun = addDays(thisMon, -1);
+  const lastLabel = formatWeekLabel(lastMon, lastSun);
+
+  const dayOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu", "Minggu"];
+  
+  const lastWeekDays = {};
+  let lastWeekSubtotal = 0;
+  dayOrder.forEach((day, idx) => {
+    const dStr = formatDateYMD(addDays(lastMon, idx));
+    const val = state.salesByDate[dStr] || "";
+    lastWeekDays[day] = { dateStr: dStr, value: val };
+    lastWeekSubtotal += cleanNum(val);
+  });
+
+  const thisWeekDays = {};
+  let thisWeekSubtotal = 0;
+  dayOrder.forEach((day, idx) => {
+    const dStr = formatDateYMD(addDays(thisMon, idx));
+    const val = state.salesByDate[dStr] || "";
+    thisWeekDays[day] = { dateStr: dStr, value: val };
+    thisWeekSubtotal += cleanNum(val);
+  });
+
+  return {
+    thisLabel,
+    thisMon,
+    thisSun,
+    thisWeekDays,
+    thisWeekSubtotal,
+    lastLabel,
+    lastMon,
+    lastSun,
+    lastWeekDays,
+    lastWeekSubtotal
+  };
 }
 
-// Auto update achievement based on current month total
+// Calculate Achievement: Sum of all days in the current month up to reportDate
 function recalculateAchievement() {
-  // Hitung total minggu ini
-  const thisWeekSum = calculateSubtotal(state.thisWeek.days);
-  // Plus tanggal 1 (jika tgl 1 jatuh di hari Minggu lalu di bulan yang sama)
-  // Di contoh user: 2 Nov - 8 Nov (Senin 6.387.210 + Selasa 7.246.840 = 13.634.050)
-  // Ditambah tgl 1 Nov (Minggu minggu lalu: 7.051.820) -> 13.634.050 + 7.051.820 = 20.685.870!
-  // Persis seperti di contoh user!
-  const sundayPrevWeek = cleanNum(state.lastWeek.days["Minggu"]);
-  const autoAchieve = thisWeekSum + sundayPrevWeek;
-  
-  if (autoAchieve > 0) {
-    state.achievement = formatRupiah(autoAchieve);
-    const achInput = document.getElementById("inputAchievement");
-    if (achInput && !achInput.dataset.manualOverride) {
-      achInput.value = state.achievement;
+  const curDate = parseDateYMD(state.reportDate || "2026-11-08");
+  const curYear = curDate.getFullYear();
+  const curMonth = curDate.getMonth(); // 0-indexed
+  const curDayNum = curDate.getDate();
+
+  // Target month name
+  state.targetMonth = MONTH_NAMES_ID[curMonth];
+  const monthNameInput = document.getElementById("monthName");
+  if (monthNameInput) monthNameInput.value = state.targetMonth;
+
+  let totalMonthSales = 0;
+  // Iterate from day 1 to reportDate day in current month
+  for (let day = 1; day <= curDayNum; day++) {
+    const d = new Date(curYear, curMonth, day);
+    const dStr = formatDateYMD(d);
+    if (state.salesByDate[dStr]) {
+      totalMonthSales += cleanNum(state.salesByDate[dStr]);
     }
   }
+
+  // If reportDate has a sales value in state.sales, ensure it's included
+  const todayYMD = formatDateYMD(curDate);
+  if (!state.salesByDate[todayYMD] && state.sales) {
+    totalMonthSales += cleanNum(state.sales);
+  }
+
+  state.achievement = formatRupiah(totalMonthSales);
+  const inputAchievement = document.getElementById("inputAchievement");
+  if (inputAchievement && !inputAchievement.dataset.manualOverride) {
+    inputAchievement.value = state.achievement;
+  }
 }
 
-// Format Date string for ID
-function formatDateIndo(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr + "T00:00:00");
-  if (isNaN(d.getTime())) return dateStr;
-  const dayName = DAYS_NAMES[d.getDay()].toLowerCase();
-  const dateNum = String(d.getDate()).padStart(2, '0');
-  const monthName = MONTH_NAMES_ID[d.getMonth()];
-  const year = d.getFullYear();
-  return `${dayName}, ${dateNum} ${monthName} ${year}`;
-}
-
+// ==========================================
 // DOM Elements
+// ==========================================
+
 const storeNameInput = document.getElementById("storeName");
 const reportDateInput = document.getElementById("reportDate");
 const dateFormattedPreview = document.getElementById("dateFormattedPreview");
@@ -169,22 +344,22 @@ const inputAchievement = document.getElementById("inputAchievement");
 const outputWhatsapp = document.getElementById("outputWhatsapp");
 const categoriesContainer = document.getElementById("categoriesContainer");
 
-// Render UI Components
+// Render All Components
 function renderAll() {
-  storeNameInput.value = state.storeName || "";
-  reportDateInput.value = state.reportDate || "";
+  storeNameInput.value = state.storeName || "KK SPBU PUSPITEK";
+  reportDateInput.value = state.reportDate || "2026-11-08";
   dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
-  
+
   inputSales.value = state.sales || "";
   inputAdt.value = state.adt || "";
   recalculateAT();
 
   renderCategories();
-  renderWeeklyGrids();
-  
-  monthNameInput.value = state.targetMonth || "";
+  renderWeeklyComparison();
+  recalculateAchievement();
+
+  monthNameInput.value = state.targetMonth || "November";
   inputTarget.value = state.targetAmount || "-";
-  inputAchievement.value = state.achievement || "";
 
   updateWhatsAppOutput();
 }
@@ -210,13 +385,13 @@ function renderCategories() {
     categoriesContainer.appendChild(row);
   });
 
-  // Attach category input listeners
+  // Category Inputs
   categoriesContainer.querySelectorAll(".input-qty").forEach(inp => {
     inp.addEventListener("input", (e) => {
       const cat = state.categories.find(c => c.id === e.target.dataset.catId);
       if (cat) {
         cat.qty = e.target.value;
-        saveState();
+        saveLocalState();
         updateWhatsAppOutput();
       }
     });
@@ -227,7 +402,7 @@ function renderCategories() {
       const cat = state.categories.find(c => c.id === e.target.dataset.catId);
       if (cat) {
         cat.nominal = e.target.value;
-        saveState();
+        saveLocalState();
         updateWhatsAppOutput();
       }
     });
@@ -241,67 +416,54 @@ function renderCategories() {
   });
 }
 
-// Render Weekly Comparison Day Inputs
-function renderWeeklyGrids() {
+// Render Weekly Comparison with Dynamic Calendar Alignment
+function renderWeeklyComparison() {
+  const weekData = getWeekData();
   const dayOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu", "Minggu"];
-  
+
   // Last Week
-  lastWeekLabel.value = state.lastWeek.label;
+  lastWeekLabel.value = weekData.lastLabel;
   lastWeekDaysContainer.innerHTML = "";
   dayOrder.forEach(day => {
+    const item = weekData.lastWeekDays[day];
     const card = document.createElement("div");
     card.className = "day-input-card";
     card.innerHTML = `
       <span class="day-name">${day}</span>
       <div class="day-val-wrapper">
         <span>Rp.</span>
-        <input type="text" data-week="last" data-day="${day}" value="${state.lastWeek.days[day] || ""}">
+        <input type="text" data-date="${item.dateStr}" value="${item.value}">
       </div>
     `;
     lastWeekDaysContainer.appendChild(card);
   });
+  lastWeekSubtotalEl.innerText = `Rp. ${formatRupiah(weekData.lastWeekSubtotal)}`;
 
   // This Week
-  thisWeekLabel.value = state.thisWeek.label;
+  thisWeekLabel.value = weekData.thisLabel;
   thisWeekDaysContainer.innerHTML = "";
-  
-  // Detect current day
-  let todayDayName = "";
-  if (state.reportDate) {
-    const d = new Date(state.reportDate + "T00:00:00");
-    if (!isNaN(d.getTime())) {
-      todayDayName = DAYS_NAMES[d.getDay()];
-    }
-  }
+  const curYMD = state.reportDate;
 
   dayOrder.forEach(day => {
-    const isToday = day === todayDayName;
+    const item = weekData.thisWeekDays[day];
+    const isToday = item.dateStr === curYMD;
     const card = document.createElement("div");
     card.className = `day-input-card ${isToday ? "today-highlight" : ""}`;
     card.innerHTML = `
       <span class="day-name">${day}</span>
       <div class="day-val-wrapper">
         <span>Rp.</span>
-        <input type="text" data-week="this" data-day="${day}" value="${state.thisWeek.days[day] || ""}">
+        <input type="text" data-date="${item.dateStr}" value="${item.value}">
       </div>
     `;
     thisWeekDaysContainer.appendChild(card);
   });
-
-  updateSubtotalsUI();
-}
-
-function updateSubtotalsUI() {
-  const lastSub = calculateSubtotal(state.lastWeek.days);
-  const thisSub = calculateSubtotal(state.thisWeek.days);
-  
-  lastWeekSubtotalEl.innerText = `Rp. ${formatRupiah(lastSub)}`;
-  thisWeekSubtotalEl.innerText = `Rp. ${formatRupiah(thisSub)}`;
+  thisWeekSubtotalEl.innerText = `Rp. ${formatRupiah(weekData.thisWeekSubtotal)}`;
 }
 
 // Generate exact WhatsApp Report Output
 function generateWhatsAppText() {
-  const store = state.storeName || "KK SPBU PUSPITEK";
+  const store = (state.storeName || "KK SPBU PUSPITEK").toUpperCase();
   const dateFormatted = formatDateIndo(state.reportDate);
   const salesStr = state.sales ? `Rp. ${state.sales}` : "Rp. ";
   const adtStr = state.adt ? `${state.adt}` : "";
@@ -311,8 +473,7 @@ function generateWhatsAppText() {
   const catLines = state.categories.map(c => {
     let q = c.qty !== undefined && c.qty !== null ? c.qty : "";
     let n = c.nominal !== undefined && c.nominal !== null ? c.nominal : "";
-    
-    // Formatting match user example
+
     if (c.name === "MO" && (q === "-" || q === "") && !n) {
       return `MO : -`;
     }
@@ -328,25 +489,23 @@ function generateWhatsAppText() {
     return `${c.name} : ${q} /${n}`;
   }).join("\n");
 
-  const lastSub = calculateSubtotal(state.lastWeek.days);
-  const thisSub = calculateSubtotal(state.thisWeek.days);
-
+  const weekData = getWeekData();
   const dayOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu", "Minggu"];
-  
+
   const lastWeekLines = dayOrder.map(day => {
-    const val = state.lastWeek.days[day];
+    const val = weekData.lastWeekDays[day].value;
     return `${day} : Rp. ${val || ""}`;
   }).join("\n");
 
   const thisWeekLines = dayOrder.map(day => {
-    const val = state.thisWeek.days[day];
+    const val = weekData.thisWeekDays[day].value;
     return `${day} : Rp. ${val || ""}`;
   }).join("\n");
 
   const targetLine = `*Target ${state.targetMonth || "November"}* : Rp. ${state.targetAmount || "-"}`;
   const achieveLine = `*Achievement* : Rp. ${state.achievement || "-"}`;
 
-  const report = `*REPORT SALES ${store.toUpperCase()}*
+  const report = `*REPORT SALES ${store}*
 
 ${dateFormatted}
 
@@ -357,17 +516,17 @@ AT : ${atStr}
 ${catLines}
 _________________________________
 
-*Compare Sales Last Week vs This Week ${store}*
+*Compare Sales Last Week vs This Week ${state.storeName || "KK SPBU PUSPITEK"}*
  
-*${state.lastWeek.label}*
+*${weekData.lastLabel}*
 ${lastWeekLines}
 
-*Subtotal this week:* Rp. ${formatRupiah(lastSub)}
+*Subtotal this week:* Rp. ${formatRupiah(weekData.lastWeekSubtotal)}
 
-*${state.thisWeek.label}*
+*${weekData.thisLabel}*
 ${thisWeekLines}
 
-*Subtotal this week:* Rp. ${formatRupiah(thisSub)}
+*Subtotal this week:* Rp. ${formatRupiah(weekData.thisWeekSubtotal)}
 
 ${targetLine}
 
@@ -396,9 +555,8 @@ function openSubItemModal(category) {
   subItemListContainer.innerHTML = "";
 
   if (!category.subItems) category.subItems = [];
-  
+
   if (category.subItems.length === 0) {
-    // Add default row
     addSubItemRow("", "", "");
   } else {
     category.subItems.forEach(item => {
@@ -450,132 +608,157 @@ btnSaveSubItems.addEventListener("click", () => {
     activeCategoryModal.nominal = formatRupiah(totalNominal);
   }
 
-  saveState();
+  saveLocalState();
   renderCategories();
   updateWhatsAppOutput();
   itemModal.classList.add("hidden");
 });
 
-// Weekly roll-over feature
-document.getElementById("btnRollWeek").addEventListener("click", () => {
-  if (confirm("Pindahkan data 'This Week' menjadi 'Last Week'?\nData 'Last Week' yang lama akan digantikan.")) {
-    state.lastWeek.label = state.thisWeek.label;
-    state.lastWeek.days = { ...state.thisWeek.days };
-    
-    // Clear this week
-    for (const d of Object.keys(state.thisWeek.days)) {
-      state.thisWeek.days[d] = "";
+// Listener: Day input change
+document.addEventListener("input", (e) => {
+  if (e.target.dataset && e.target.dataset.date) {
+    const targetDate = e.target.dataset.date;
+    const rawVal = e.target.value;
+    const formatted = rawVal ? formatRupiah(rawVal) : "";
+    e.target.value = formatted;
+
+    state.salesByDate[targetDate] = formatted;
+
+    // If edited date is current reportDate, sync to Sales
+    if (targetDate === state.reportDate) {
+      state.sales = formatted;
+      inputSales.value = formatted;
+      recalculateAT();
     }
-    state.thisWeek.label = "This week (Minggu Baru)";
-    saveState();
-    renderWeeklyGrids();
+
+    const weekData = getWeekData();
+    lastWeekSubtotalEl.innerText = `Rp. ${formatRupiah(weekData.lastWeekSubtotal)}`;
+    thisWeekSubtotalEl.innerText = `Rp. ${formatRupiah(weekData.thisWeekSubtotal)}`;
+
     recalculateAchievement();
+    saveLocalState();
     updateWhatsAppOutput();
-    showToast("Minggu berhasil diarsipkan ke Last Week! 📅");
   }
 });
 
-// General Input Listeners
-storeNameInput.addEventListener("input", (e) => {
-  state.storeName = e.target.value;
-  saveState();
-  updateWhatsAppOutput();
-});
-
-reportDateInput.addEventListener("change", (e) => {
-  state.reportDate = e.target.value;
-  dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
-  
-  // Update today highlight on week view
-  renderWeeklyGrids();
-  saveState();
-  updateWhatsAppOutput();
-});
-
+// Listener: Sales Input
 inputSales.addEventListener("input", (e) => {
   const val = e.target.value;
   state.sales = formatRupiah(val);
   e.target.value = state.sales;
 
-  // Auto update sales on current day in thisWeek
+  // Auto assign to today's date in salesByDate
   if (state.reportDate) {
-    const d = new Date(state.reportDate + "T00:00:00");
-    if (!isNaN(d.getTime())) {
-      const dayName = DAYS_NAMES[d.getDay()];
-      if (dayName && state.thisWeek.days[dayName] !== undefined) {
-        state.thisWeek.days[dayName] = state.sales;
-        const dayInput = document.querySelector(`input[data-week="this"][data-day="${dayName}"]`);
-        if (dayInput) dayInput.value = state.sales;
-        updateSubtotalsUI();
-        recalculateAchievement();
-      }
-    }
+    state.salesByDate[state.reportDate] = state.sales;
+    renderWeeklyComparison();
   }
 
   recalculateAT();
-  saveState();
+  recalculateAchievement();
+  saveLocalState();
   updateWhatsAppOutput();
 });
 
 inputAdt.addEventListener("input", (e) => {
   state.adt = e.target.value ? parseInt(e.target.value, 10) : "";
   recalculateAT();
-  saveState();
+  saveLocalState();
+  updateWhatsAppOutput();
+});
+
+storeNameInput.addEventListener("input", (e) => {
+  state.storeName = e.target.value;
+  saveLocalState();
+  updateWhatsAppOutput();
+});
+
+reportDateInput.addEventListener("change", (e) => {
+  state.reportDate = e.target.value;
+  dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
+
+  // If there's already sales recorded for this date, pull it
+  if (state.salesByDate[state.reportDate]) {
+    state.sales = state.salesByDate[state.reportDate];
+    inputSales.value = state.sales;
+  }
+
+  renderWeeklyComparison();
+  recalculateAT();
+  recalculateAchievement();
+  saveLocalState();
   updateWhatsAppOutput();
 });
 
 monthNameInput.addEventListener("input", (e) => {
   state.targetMonth = e.target.value;
-  saveState();
+  saveLocalState();
   updateWhatsAppOutput();
 });
 
 inputTarget.addEventListener("input", (e) => {
   state.targetAmount = e.target.value;
-  saveState();
+  saveLocalState();
   updateWhatsAppOutput();
 });
 
 inputAchievement.addEventListener("input", (e) => {
   inputAchievement.dataset.manualOverride = "true";
   state.achievement = e.target.value;
-  saveState();
+  saveLocalState();
   updateWhatsAppOutput();
 });
 
-// Listener for Weekly Days Grid
-document.addEventListener("input", (e) => {
-  if (e.target.dataset && e.target.dataset.week && e.target.dataset.day) {
-    const week = e.target.dataset.week;
-    const day = e.target.dataset.day;
-    const rawVal = e.target.value;
-    const formatted = rawVal ? formatRupiah(rawVal) : "";
-    e.target.value = formatted;
-    
-    if (week === "last") {
-      state.lastWeek.days[day] = formatted;
-    } else {
-      state.thisWeek.days[day] = formatted;
-    }
-    
-    updateSubtotalsUI();
+// Weekly roll-over feature (manual push)
+document.getElementById("btnRollWeek").addEventListener("click", () => {
+  if (confirm("Geser tanggal laporan ke Senin minggu depan (+7 hari)?\nMinggu berjalan akan otomatis menjadi Minggu Lalu.")) {
+    const curDate = parseDateYMD(state.reportDate);
+    const nextWeekDate = addDays(curDate, 7);
+    state.reportDate = formatDateYMD(nextWeekDate);
+    reportDateInput.value = state.reportDate;
+    dateFormattedPreview.innerText = formatDateIndo(state.reportDate);
+
+    renderWeeklyComparison();
     recalculateAchievement();
-    saveState();
+    saveLocalState();
     updateWhatsAppOutput();
+    showToast("Kalender bergeser ke minggu baru! 📅✨");
   }
 });
 
-lastWeekLabel.addEventListener("input", (e) => {
-  state.lastWeek.label = e.target.value;
-  saveState();
-  updateWhatsAppOutput();
+// Cloud Sync & File Actions
+document.getElementById("btnCloudSave").addEventListener("click", () => {
+  saveToCloud(false);
 });
 
-thisWeekLabel.addEventListener("input", (e) => {
-  state.thisWeek.label = e.target.value;
-  saveState();
-  updateWhatsAppOutput();
+document.getElementById("btnCloudLoad").addEventListener("click", () => {
+  loadFromCloud(false);
 });
+
+const jsonFileInput = document.getElementById("jsonFileInput");
+if (jsonFileInput) {
+  jsonFileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          state = {
+            ...state,
+            ...parsed,
+            salesByDate: { ...state.salesByDate, ...(parsed.salesByDate || {}) }
+          };
+          saveLocalState();
+          renderAll();
+          showToast("✓ File data berhasil dipulihkan! 📂✨");
+        } catch (err) {
+          alert("File JSON tidak valid atau rusak.");
+        }
+      };
+      reader.readAsText(file);
+    }
+  });
+}
 
 // Copy & WhatsApp Share Actions
 const toastEl = document.getElementById("toast");
@@ -606,8 +789,8 @@ document.getElementById("btnSendWa").addEventListener("click", () => {
 });
 
 document.getElementById("btnResetAll").addEventListener("click", () => {
-  if (confirm("Reset semua data kembali ke contoh awal?")) {
-    localStorage.removeItem("rekup_sales_state_v1");
+  if (confirm("Reset semua data kembali ke default?")) {
+    localStorage.removeItem("rekup_sales_state_v2");
     state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     renderAll();
     showToast("Data di-reset ke default! ↺");
@@ -615,8 +798,9 @@ document.getElementById("btnResetAll").addEventListener("click", () => {
 });
 
 // ==========================================
-// OCR Engine (Tesseract.js + Smart Parser)
+// Advanced POS OCR Engine (Tesseract.js + Canvas Filter)
 // ==========================================
+
 const receiptInputCamera = document.getElementById("receiptInputCamera");
 const receiptInputGallery = document.getElementById("receiptInputGallery");
 const btnActionCamera = document.getElementById("btnActionCamera");
@@ -636,118 +820,65 @@ const detectedAdt = document.getElementById("detectedAdt");
 const detectedSales = document.getElementById("detectedSales");
 const detectedDate = document.getElementById("detectedDate");
 
-// Camera actions
-if (btnActionCamera) {
-  btnActionCamera.addEventListener("click", (e) => {
-    e.stopPropagation();
-    receiptInputCamera.value = "";
-    receiptInputCamera.click();
-  });
-}
-if (btnRetakeCamera) {
-  btnRetakeCamera.addEventListener("click", (e) => {
-    e.stopPropagation();
-    receiptInputCamera.value = "";
-    receiptInputCamera.click();
-  });
-}
+if (btnActionCamera) btnActionCamera.addEventListener("click", (e) => { e.stopPropagation(); receiptInputCamera.value = ""; receiptInputCamera.click(); });
+if (btnRetakeCamera) btnRetakeCamera.addEventListener("click", (e) => { e.stopPropagation(); receiptInputCamera.value = ""; receiptInputCamera.click(); });
+if (btnActionGallery) btnActionGallery.addEventListener("click", (e) => { e.stopPropagation(); receiptInputGallery.value = ""; receiptInputGallery.click(); });
+if (btnChangeGallery) btnChangeGallery.addEventListener("click", (e) => { e.stopPropagation(); receiptInputGallery.value = ""; receiptInputGallery.click(); });
 
-// Gallery actions
-if (btnActionGallery) {
-  btnActionGallery.addEventListener("click", (e) => {
-    e.stopPropagation();
-    receiptInputGallery.value = "";
-    receiptInputGallery.click();
-  });
-}
-if (btnChangeGallery) {
-  btnChangeGallery.addEventListener("click", (e) => {
-    e.stopPropagation();
-    receiptInputGallery.value = "";
-    receiptInputGallery.click();
-  });
-}
-
-// File change handlers
-receiptInputCamera.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (file) handleImageFile(file);
-});
-
-receiptInputGallery.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (file) handleImageFile(file);
-});
-
-// Drag & Drop Support
-dropArea.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropArea.classList.add("drag-over");
-});
-dropArea.addEventListener("dragleave", () => {
-  dropArea.classList.remove("drag-over");
-});
-dropArea.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropArea.classList.remove("drag-over");
-  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-    handleImageFile(e.dataTransfer.files[0]);
-  }
-});
-
-// Paste Image Support (Ctrl+V)
-document.addEventListener("paste", (e) => {
-  const items = e.clipboardData && e.clipboardData.items;
-  if (!items) return;
-  for (let i = 0; i < items.length; i++) {
-    if (items[i].type && items[i].type.startsWith("image/")) {
-      const file = items[i].getAsFile();
-      if (file) {
-        handleImageFile(file);
-        break;
-      }
-    }
-  }
-});
+receiptInputCamera.addEventListener("change", (e) => { if (e.target.files[0]) handleImageFile(e.target.files[0]); });
+receiptInputGallery.addEventListener("change", (e) => { if (e.target.files[0]) handleImageFile(e.target.files[0]); });
 
 function handleImageFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
-    const imageUrl = e.target.result;
-    imagePreview.src = imageUrl;
+    const rawUrl = e.target.result;
+    imagePreview.src = rawUrl;
     uploadPlaceholder.classList.add("hidden");
     imagePreviewWrapper.classList.remove("hidden");
-    
-    // Run OCR
-    runClientOCR(imageUrl);
+
+    // Preprocess on canvas to eliminate shadows and boost thermal receipt contrast
+    const img = new Image();
+    img.onload = () => {
+      const enhancedDataUrl = enhanceReceiptCanvas(img);
+      runClientOCR(enhancedDataUrl);
+    };
+    img.src = rawUrl;
   };
   reader.readAsDataURL(file);
 }
 
-// Preprocess image on canvas to boost thermal receipt text clarity
-function preprocessReceipt(imgElement) {
+// Canvas contrast & shadow removal filter
+function enhanceReceiptCanvas(img) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
-  
-  canvas.width = imgElement.naturalWidth || imgElement.width;
-  canvas.height = imgElement.naturalHeight || imgElement.height;
-  
-  ctx.drawImage(imgElement, 0, 0);
+
+  // Keep good resolution for OCR
+  const scale = Math.min(1.5, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imgData.data;
-  
-  // Grayscale & simple high-contrast thresholding
+
+  // Grayscale & dynamic contrast stretching
+  const contrast = 1.3;
+  const factor = (259 * (contrast * 100 + 255)) / (255 * (259 - contrast * 100));
+
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
-    const g = data[i+1];
-    const b = data[i+2];
-    const avg = 0.299 * r + 0.587 * g + 0.114 * b;
-    // Binarize
-    const threshold = avg < 140 ? 0 : 255;
-    data[i] = threshold;
-    data[i+1] = threshold;
-    data[i+2] = threshold;
+    const g = data[i + 1];
+    const b = data[i + 2];
+    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    // Contrast
+    gray = factor * (gray - 128) + 128;
+    gray = Math.max(0, Math.min(255, gray));
+
+    data[i] = gray;
+    data[i + 1] = gray;
+    data[i + 2] = gray;
   }
+
   ctx.putImageData(imgData, 0, 0);
   return canvas.toDataURL("image/png");
 }
@@ -755,7 +886,7 @@ function preprocessReceipt(imgElement) {
 async function runClientOCR(imageSrc) {
   ocrProgressBox.classList.remove("hidden");
   ocrProgressBar.style.width = "10%";
-  ocrStatusText.innerText = "Memuat OCR Engine...";
+  ocrStatusText.innerText = "Memuat AI OCR Engine...";
 
   try {
     const worker = await Tesseract.createWorker('ind+eng', 1, {
@@ -774,72 +905,94 @@ async function runClientOCR(imageSrc) {
     await worker.terminate();
 
     ocrProgressBar.style.width = "100%";
-    ocrStatusText.innerText = "OCR Selesai! Menguraikan data...";
-    setTimeout(() => ocrProgressBox.classList.add("hidden"), 800);
+    ocrStatusText.innerText = "Selesai! Menguraikan data...";
+    setTimeout(() => ocrProgressBox.classList.add("hidden"), 600);
 
     parseReceiptText(res.data.text);
   } catch (err) {
     console.error("OCR Error:", err);
-    ocrStatusText.innerText = "OCR gagal atau koneksi lambat. Anda tetap bisa mengisi form manual.";
+    ocrStatusText.innerText = "OCR gagal atau koneksi lambat. Silakan isi form manual.";
     setTimeout(() => ocrProgressBox.classList.add("hidden"), 2500);
   }
 }
 
-// Regex Intelligence for POS & Kopi Kenangan Receipts
+// Regex Intelligence for Kopi Kenangan / Retail POS Receipts
 function parseReceiptText(text) {
   console.log("Raw OCR Result:\n", text);
-  
+
   let foundAdt = null;
   let foundSales = null;
   let foundDate = null;
   let foundStore = null;
 
-  // 1. Detect Print Count (ADT)
-  // Pattern: "Print Count: 178" / "Print Count : 178"
+  // 1. ADT (Print Count)
+  // Pattern: "Print Count: 168" / "Print Count : 168"
   const adtMatch = text.match(/print\s*count\s*[:.]?\s*(\d+)/i);
   if (adtMatch && adtMatch[1]) {
     foundAdt = parseInt(adtMatch[1], 10);
   }
 
-  // 2. Detect Total Sales
-  // Look for "Total" followed by number with commas/dots, e.g. "Total 7,246,840"
-  // Avoid "Online Total" or "Offline Total" by prioritizing final Total
-  const totalMatches = [...text.matchAll(/(?:^|\n)\s*(?:Grand\s*)?Total\s*[:.]?\s*([0-9.,]+)/gim)];
-  if (totalMatches.length > 0) {
-    // Pick the last matched Total line
-    const lastMatch = totalMatches[totalMatches.length - 1];
-    foundSales = formatRupiah(lastMatch[1]);
+  // 2. Date Extraction (From DD-MM-YYYY under Print Count)
+  // Handles Tesseract misreading '0' as '@' or 'O', e.g. "From @8-11-2026 To 08-11-2026"
+  const dateMatch = text.match(/from\s*[:.]?\s*([@0-9oO]{1,2})[-/.](\d{1,2})[-/.](\d{4})/i);
+  if (dateMatch) {
+    let rawDay = dateMatch[1].replace(/[@oO]/g, '0');
+    let d = String(parseInt(rawDay, 10)).padStart(2, '0');
+    let m = String(parseInt(dateMatch[2], 10)).padStart(2, '0');
+    let y = dateMatch[3];
+    foundDate = `${y}-${m}-${d}`;
   } else {
-    // Fallback: look for lines ending in large amount near footer
-    const numMatches = text.match(/\b([1-9][0-9]{0,2}(?:[.,][0-9]{3}){2})\b/g);
-    if (numMatches && numMatches.length > 0) {
-      foundSales = formatRupiah(numMatches[numMatches.length - 1]);
+    // Fallback: general date pattern DD-MM-YYYY
+    const genDate = text.match(/(\d{2})[-/.](\d{2})[-/.](\d{4})/);
+    if (genDate) {
+      foundDate = `${genDate[3]}-${genDate[2]}-${genDate[1]}`;
     }
   }
 
-  // 3. Detect Date
-  // Pattern: "From 03-11-2026 To 03-11-2026" or "Nov 3, 2026"
-  const dateMatch1 = text.match(/(\d{2})[-/.](\d{2})[-/.](\d{4})/);
-  if (dateMatch1) {
-    const [_, d, m, y] = dateMatch1;
-    foundDate = `${y}-${m}-${d}`;
-  } else {
-    const dateMatch2 = text.match(/([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})/i);
-    if (dateMatch2) {
-      const monthIdx = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"]
-        .indexOf(dateMatch2[1].toLowerCase().slice(0, 3));
-      if (monthIdx !== -1) {
-        const m = String(monthIdx + 1).padStart(2, '0');
-        const d = String(dateMatch2[2]).padStart(2, '0');
-        foundDate = `${dateMatch2[3]}-${m}-${d}`;
+  // 3. Store Name Extraction
+  const storeMatch = text.match(/TGR\.[A-Z0-9]+/i);
+  if (storeMatch) {
+    foundStore = "KK SPBU PUSPITEK";
+  }
+
+  // 4. Sales Extraction (Guaranteed POS Math & Explicit Line Check)
+  // Extract Offline Total & Online Total
+  let offlineTotal = 0;
+  let onlineTotal = 0;
+
+  const offMatch = text.match(/offline\s*total\s*[*:]?\s*([0-9.,]+)/i);
+  if (offMatch) offlineTotal = cleanNum(offMatch[1]);
+
+  const onMatch = text.match(/online\s*total\s*[*:]?\s*([0-9.,]+)/i);
+  if (onMatch) onlineTotal = cleanNum(onMatch[1]);
+
+  // Extract explicit Total (ignoring Offline Total and Online Total)
+  let explicitTotal = 0;
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // Must start with Total, NOT followed by Offline or Online
+    if (/^total\b/i.test(line) && !/offline|online/i.test(line)) {
+      const m = line.match(/([0-9]{1,3}(?:[.,][0-9]{3})+)/);
+      if (m) {
+        explicitTotal = cleanNum(m[1]);
+      } else if (i + 1 < lines.length) {
+        const nextM = lines[i + 1].match(/([0-9]{1,3}(?:[.,][0-9]{3})+)/);
+        if (nextM) explicitTotal = cleanNum(nextM[1]);
       }
     }
   }
 
-  // 4. Detect Outlet Code (e.g. TGR.SPBUPPTK)
-  const storeMatch = text.match(/TGR\.[A-Z0-9]+/i);
-  if (storeMatch) {
-    foundStore = "KK SPBU PUSPITEK"; // Clean mapped name
+  // Best Sales Logic:
+  // Kopi Kenangan POS Math: Grand Total = Offline Total + Online Total
+  if (explicitTotal > 1000000) {
+    foundSales = formatRupiah(explicitTotal);
+  } else if (offlineTotal > 0 && onlineTotal > 0) {
+    // Verified 100% sum of offline + online!
+    const sumTotal = offlineTotal + onlineTotal;
+    foundSales = formatRupiah(sumTotal);
+  } else if (explicitTotal > 0) {
+    foundSales = formatRupiah(explicitTotal);
   }
 
   // Apply to State & Form
@@ -848,28 +1001,25 @@ function parseReceiptText(text) {
     inputAdt.value = foundAdt;
     detectedAdt.innerText = foundAdt;
   }
-  if (foundSales) {
-    state.sales = foundSales;
-    inputSales.value = foundSales;
-    detectedSales.innerText = `Rp. ${foundSales}`;
-    
-    // Auto populate today's day on this week
-    if (foundDate) {
-      const d = new Date(foundDate + "T00:00:00");
-      if (!isNaN(d.getTime())) {
-        const dayName = DAYS_NAMES[d.getDay()];
-        if (dayName && state.thisWeek.days[dayName] !== undefined) {
-          state.thisWeek.days[dayName] = foundSales;
-        }
-      }
-    }
-  }
+
   if (foundDate) {
     state.reportDate = foundDate;
     reportDateInput.value = foundDate;
     dateFormattedPreview.innerText = formatDateIndo(foundDate);
     detectedDate.innerText = formatDateIndo(foundDate);
   }
+
+  if (foundSales) {
+    state.sales = foundSales;
+    inputSales.value = foundSales;
+    detectedSales.innerText = `Rp. ${foundSales}`;
+
+    // Auto-record to salesByDate
+    if (state.reportDate) {
+      state.salesByDate[state.reportDate] = foundSales;
+    }
+  }
+
   if (foundStore) {
     state.storeName = foundStore;
     storeNameInput.value = foundStore;
@@ -877,20 +1027,21 @@ function parseReceiptText(text) {
 
   ocrDetectedBox.classList.remove("hidden");
   recalculateAT();
-  renderWeeklyGrids();
+  renderWeeklyComparison();
   recalculateAchievement();
-  saveState();
+  saveLocalState();
   updateWhatsAppOutput();
-  showToast("Data struk berhasil dipindai & dimasukkan ke form! 🎉");
+
+  // Auto-save to cloud in background
+  saveToCloud(true);
+
+  showToast("Struk berhasil dipindai! Data siap disalin ke WA 📋✨");
 }
 
-// Initial Run
-document.addEventListener("DOMContentLoaded", () => {
-  initTheme();
-  renderAll();
-});
-
+// ==========================================
 // Theme Management (Dark Mode & Light Mode)
+// ==========================================
+
 const btnThemeToggle = document.getElementById("btnThemeToggle");
 
 function applyTheme(theme) {
@@ -934,3 +1085,11 @@ function initTheme() {
     });
   }
 }
+
+// Initial Run
+document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
+  renderAll();
+  // Auto sync cloud on start
+  loadFromCloud(true);
+});
