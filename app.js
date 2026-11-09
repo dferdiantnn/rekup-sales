@@ -1184,21 +1184,27 @@ function parseReceiptText(text) {
   let onlineTotal = 0;
   let explicitTotal = 0;
 
-  // Offline Total (e.g. 3,014,350)
-  const offMatch = text.match(/offline\s*total[^\d]*([0-9.,]+)/i);
+  // Offline Total (e.g. 2,260,150) - support "Offline Tota", "Offline Total", "Offline"
+  const offMatch = text.match(/offline\s*tota[a-z]*[^\d]*([0-9.,]+)/i)
+    || text.match(/offline[^\d\n]*([0-9.,]+)/i);
   if (offMatch) offlineTotal = cleanNum(offMatch[1]);
 
-  // Online Total (e.g. 2,866,770)
-  const onMatch = text.match(/online\s*total[^\d]*([0-9.,]+)/i)
+  // Online Total (e.g. 3,046,070) - support "Online Tota", "Online Total", or line after "Take Away"
+  const onMatch = text.match(/online\s*tota[a-z]*[^\d]*([0-9.,]+)/i)
+    || text.match(/online\b[^\d\n]*\n?[^\d\n]*([0-9.,]+)/i)
     || text.match(/take\s*away[^\n]*\n[^\d\n]*([0-9.,]+)/i);
   if (onMatch) onlineTotal = cleanNum(onMatch[1]);
 
-  // Explicit Grand Total line (e.g. Total 5,881,120)
-  // Check lines that start with Total (not Offline Total / Online Total)
+  // Collect all 7-digit numbers (> 1,000,000) on receipt
+  const all7DigitNums = Array.from(text.matchAll(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/g))
+    .map(m => cleanNum(m[1]));
+
+  // Explicit Grand Total line at bottom (e.g. Total 5,306,220 or 5,881,120)
+  // Must NOT match Offline Total or Online Total
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (/^total\b/i.test(line) && !/offline|online/i.test(line)) {
+    if (/\btotal\b/i.test(line) && !/offline|online/i.test(line)) {
       const m = line.match(/([0-9]{1,3}(?:[.,][0-9]{3})+)/);
       if (m) {
         explicitTotal = cleanNum(m[1]);
@@ -1210,23 +1216,29 @@ function parseReceiptText(text) {
   }
 
   // Also check line right above "All Price are Inclusive Tax" or "Closed"
-  if (!explicitTotal) {
+  if (!explicitTotal || explicitTotal === onlineTotal || explicitTotal === offlineTotal) {
     const inclusiveMatch = text.match(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})[^\d\n]*(?:\n[^\n]*)?(?:all price|inclusive tax)/i);
     if (inclusiveMatch) explicitTotal = cleanNum(inclusiveMatch[1]);
   }
 
-  // Select Best Sales:
+  // POS Arithmetic Verification:
+  let grandTotal = 0;
   if (offlineTotal > 0 && onlineTotal > 0) {
-    // POS Math Verified: Grand Total = Offline Total + Online Total
-    const sumTotal = offlineTotal + onlineTotal;
-    foundSales = formatRupiah(sumTotal);
-  } else if (explicitTotal > 1000000) {
-    foundSales = formatRupiah(explicitTotal);
+    // Grand Total is sum of offline and online
+    const sum = offlineTotal + onlineTotal;
+    const matchedSum = all7DigitNums.find(n => Math.abs(n - sum) <= 100);
+    grandTotal = matchedSum || sum;
+  } else if (explicitTotal > 0 && explicitTotal !== offlineTotal && explicitTotal !== onlineTotal) {
+    grandTotal = explicitTotal;
+  } else if (all7DigitNums.length > 0) {
+    // Grand Total is mathematically the maximum number on POS receipt
+    grandTotal = Math.max(...all7DigitNums);
   } else if (foundDate && state.salesByDate && state.salesByDate[foundDate]) {
-    // If OCR couldn't read bottom total, fallback to the known sales for this exact date!
-    foundSales = state.salesByDate[foundDate];
-  } else if (explicitTotal > 0) {
-    foundSales = formatRupiah(explicitTotal);
+    grandTotal = cleanNum(state.salesByDate[foundDate]);
+  }
+
+  if (grandTotal > 0) {
+    foundSales = formatRupiah(grandTotal);
   }
 
   // Apply to State & Form
