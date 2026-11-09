@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.3.1">
+  <link rel="stylesheet" href="style.css?v=2.4.0">
   <!-- Tesseract.js for client-side OCR (Runs 100% in browser, completely free & offline-ready after load) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -179,12 +179,25 @@
     <section class="card categories-card">
       <div class="section-title">
         <span>🥐 Rincian Kategori Menu (Sub-Items)</span>
+        <span class="chip chip-accent">2 Mode Input</span>
       </div>
-      <p class="section-desc">Isi jumlah (Qty) dan nominal Rupiah per kategori, atau tambahkan rincian sub-item otomatis.</p>
+      <p class="section-desc">Tempel (paste) format teks rincian sekaligus di kotak bawah, atau revisi langsung angka satuan per kategori.</p>
 
+      <!-- Mode 1: Bulk Text Input -->
+      <div class="bulk-category-box">
+        <label for="bulkCategoryText">📋 Input Format Teks Sekaligus (Otomatis Masuk ke Rincian & WA)</label>
+        <textarea id="bulkCategoryText" rows="7" placeholder="CR :10 / 90.222&#10;Basic Food : 12 / 131.850&#10;Toast :2 / 20.300&#10;Bundle / Pahe :  4 / 108.908&#10;km :2 / 31.062&#10;MO : &#10;Merchandise :"></textarea>
+      </div>
+
+      <!-- Mode 2: Individual Quick Revision Inputs -->
+      <div class="sub-section-label">✏️ Revisi Satuan (Qty / Nominal Rupiah)</div>
       <div class="categories-list" id="categoriesContainer">
         <!-- Will be dynamically populated or pre-rendered -->
       </div>
+
+      <button type="button" class="btn btn-save-categories" id="btnSaveCategoriesCloud">
+        💾 Simpan Rincian Menu ke Database
+      </button>
     </section>
 
     <!-- Weekly Comparison Card -->
@@ -310,6 +323,6 @@
     </footer>
   </div>
 
-  <script src="app.js?v=2.3.4"></script>
+  <script src="app.js?v=2.4.0"></script>
 </body>
 </html>

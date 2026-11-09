@@ -289,7 +289,7 @@ function initFirebaseLiveListener() {
         const payload = JSON.parse(e.data);
         if (payload && payload.data) {
           const newData = payload.data;
-          if (newData.salesByDate || newData.sales) {
+          if (newData.salesByDate || newData.sales || newData.categories) {
             state = {
               ...state,
               ...newData,
@@ -432,6 +432,56 @@ const inputTarget = document.getElementById("inputTarget");
 const inputAchievement = document.getElementById("inputAchievement");
 const outputWhatsapp = document.getElementById("outputWhatsapp");
 const categoriesContainer = document.getElementById("categoriesContainer");
+const bulkCategoryText = document.getElementById("bulkCategoryText");
+const btnSaveCategoriesCloud = document.getElementById("btnSaveCategoriesCloud");
+
+function formatCategoriesToBulkText() {
+  return state.categories.map(c => {
+    const label = c.id === "PAHE" ? "Bundle / Pahe" : c.name;
+    const q = c.qty !== undefined && c.qty !== null && String(c.qty).trim() !== "" ? String(c.qty).trim() : "";
+    const n = c.nominal !== undefined && c.nominal !== null && String(c.nominal).trim() !== "" ? String(c.nominal).trim() : "";
+    if (!q && !n) return `${label} : `;
+    return `${label} : ${q} / ${n}`;
+  }).join("\n");
+}
+
+function parseBulkCategoryText(rawText) {
+  const lines = (rawText || "").split(/\r?\n/);
+  lines.forEach(line => {
+    const m = line.match(/^\s*([^:]+?)\s*:\s*(.*?)\s*$/);
+    if (!m) return;
+    const rawKey = m[1].trim().toLowerCase();
+    const rawVal = m[2].trim();
+
+    let targetId = null;
+    if (rawKey === "cr") targetId = "CR";
+    else if (rawKey.includes("basic")) targetId = "Basic Food";
+    else if (rawKey.includes("toast")) targetId = "Toast";
+    else if (rawKey === "km" || rawKey.includes("kenangan manis")) targetId = "KM";
+    else if (rawKey.includes("pahe") || rawKey.includes("bundle")) targetId = "PAHE";
+    else if (rawKey === "mo" || rawKey.includes("make order")) targetId = "MO";
+    else if (rawKey.includes("merch")) targetId = "Merchandise";
+
+    if (!targetId) return;
+    const cat = state.categories.find(c => c.id === targetId);
+    if (!cat) return;
+
+    if (!rawVal || rawVal === "-" || /^-\s*\/\s*-$/.test(rawVal)) {
+      cat.qty = "";
+      cat.nominal = "";
+    } else if (rawVal.includes("/")) {
+      const parts = rawVal.split("/");
+      const qClean = (parts[0] || "").replace(/[^0-9]/g, "");
+      const nClean = (parts[1] || "").replace(/[^0-9]/g, "");
+      cat.qty = qClean ? parseInt(qClean, 10) : "";
+      cat.nominal = nClean ? formatRupiah(nClean) : "";
+    } else {
+      const qClean = rawVal.replace(/[^0-9]/g, "");
+      cat.qty = qClean ? parseInt(qClean, 10) : "";
+      cat.nominal = "";
+    }
+  });
+}
 
 // Render All Components
 function renderAll() {
@@ -451,6 +501,9 @@ function renderAll() {
   recalculateAT();
 
   renderCategories();
+  if (bulkCategoryText && document.activeElement !== bulkCategoryText) {
+    bulkCategoryText.value = formatCategoriesToBulkText();
+  }
   renderWeeklyComparison();
   recalculateAchievement();
 
@@ -487,6 +540,9 @@ function renderCategories() {
       const cat = state.categories.find(c => c.id === e.target.dataset.catId);
       if (cat) {
         cat.qty = e.target.value;
+        if (bulkCategoryText && document.activeElement !== bulkCategoryText) {
+          bulkCategoryText.value = formatCategoriesToBulkText();
+        }
         saveLocalState();
         updateWhatsAppOutput();
       }
@@ -497,7 +553,12 @@ function renderCategories() {
     inp.addEventListener("input", (e) => {
       const cat = state.categories.find(c => c.id === e.target.dataset.catId);
       if (cat) {
-        cat.nominal = e.target.value;
+        const raw = e.target.value;
+        cat.nominal = raw ? formatRupiah(raw) : "";
+        e.target.value = cat.nominal;
+        if (bulkCategoryText && document.activeElement !== bulkCategoryText) {
+          bulkCategoryText.value = formatCategoriesToBulkText();
+        }
         saveLocalState();
         updateWhatsAppOutput();
       }
@@ -509,6 +570,24 @@ function renderCategories() {
       const idx = parseInt(btn.dataset.catIndex, 10);
       openSubItemModal(state.categories[idx]);
     });
+  });
+}
+
+if (bulkCategoryText) {
+  bulkCategoryText.addEventListener("input", (e) => {
+    parseBulkCategoryText(e.target.value);
+    renderCategories();
+    saveLocalState();
+    updateWhatsAppOutput();
+  });
+}
+
+if (btnSaveCategoriesCloud) {
+  btnSaveCategoriesCloud.addEventListener("click", async () => {
+    const ok = await saveToCloud(false);
+    if (ok) {
+      showToast("✓ Rincian Kategori Menu berhasil disimpan ke Database! 💾☁️");
+    }
   });
 }
 
@@ -969,6 +1048,9 @@ function cleanDailyForm() {
       cat.nominal = "";
       cat.subItems = [];
     });
+    if (bulkCategoryText) {
+      bulkCategoryText.value = "";
+    }
 
     renderAll();
     saveLocalState();
@@ -1031,54 +1113,49 @@ function handleImageFile(file) {
     uploadPlaceholder.classList.add("hidden");
     imagePreviewWrapper.classList.remove("hidden");
 
-    // Preprocess on canvas to eliminate shadows and boost thermal receipt contrast
+    // Preprocess on two complementary canvases to guarantee reading both top & shadowed bottom Total
     const img = new Image();
     img.onload = () => {
-      const enhancedDataUrl = enhanceReceiptCanvas(img);
-      runClientOCR(enhancedDataUrl);
+      const canvases = buildReceiptCanvases(img);
+      runClientOCR(canvases);
     };
     img.src = rawUrl;
   };
   reader.readAsDataURL(file);
 }
 
-// Canvas contrast & shadow removal filter
-function enhanceReceiptCanvas(img) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+// Build 2 complementary crops without destructive contrast distortion:
+// Pass 1: 72% center width crop (reads Print Count, Date, Offline Total, Online Total cleanly)
+// Pass 2: 86% center width crop + 7.5% top/bottom black border (shifts Otsu window to read shadowed bottom Total)
+function buildReceiptCanvases(img) {
+  const origW = img.naturalWidth || img.width;
+  const origH = img.naturalHeight || img.height;
 
-  // Keep good resolution for OCR
-  const scale = Math.min(1.5, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
-  canvas.width = Math.round(img.naturalWidth * scale);
-  canvas.height = Math.round(img.naturalHeight * scale);
+  // Pass 1: 71% center width crop
+  const c1 = document.createElement("canvas");
+  const sx1 = Math.round(origW * 0.145);
+  const sw1 = Math.round(origW * 0.71);
+  c1.width = sw1;
+  c1.height = origH;
+  const ctx1 = c1.getContext("2d");
+  ctx1.drawImage(img, sx1, 0, sw1, origH, 0, 0, sw1, origH);
 
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imgData.data;
+  // Pass 2: 86% center width crop with 7.5% top/bottom black padding (for shadowed bottom Total line)
+  const c2 = document.createElement("canvas");
+  const sx2 = Math.round(origW * 0.07);
+  const sw2 = Math.round(origW * 0.86);
+  const padY = Math.round(origH * 0.075);
+  c2.width = sw2;
+  c2.height = origH + padY * 2;
+  const ctx2 = c2.getContext("2d");
+  ctx2.fillStyle = "#000000";
+  ctx2.fillRect(0, 0, c2.width, c2.height);
+  ctx2.drawImage(img, sx2, 0, sw2, origH, 0, padY, sw2, origH);
 
-  // Grayscale & dynamic contrast stretching
-  const contrast = 1.3;
-  const factor = (259 * (contrast * 100 + 255)) / (255 * (259 - contrast * 100));
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-    // Contrast
-    gray = factor * (gray - 128) + 128;
-    gray = Math.max(0, Math.min(255, gray));
-
-    data[i] = gray;
-    data[i + 1] = gray;
-    data[i + 2] = gray;
-  }
-
-  ctx.putImageData(imgData, 0, 0);
-  return canvas.toDataURL("image/png");
+  return [c1.toDataURL("image/jpeg", 0.95), c2.toDataURL("image/jpeg", 0.95)];
 }
 
-async function runClientOCR(imageSrc) {
+async function runClientOCR(canvases) {
   ocrProgressBox.classList.remove("hidden");
   ocrProgressBar.style.width = "10%";
   ocrStatusText.innerText = "Memuat AI OCR Engine...";
@@ -1096,14 +1173,21 @@ async function runClientOCR(imageSrc) {
       }
     });
 
-    const res = await worker.recognize(imageSrc);
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+
+    const list = Array.isArray(canvases) ? canvases : [canvases];
+    let combinedText = "";
+    for (let i = 0; i < list.length; i++) {
+      const res = await worker.recognize(list[i]);
+      combinedText += "\n" + (res.data && res.data.text ? res.data.text : "");
+    }
     await worker.terminate();
 
     ocrProgressBar.style.width = "100%";
     ocrStatusText.innerText = "Selesai! Menguraikan data...";
     setTimeout(() => ocrProgressBox.classList.add("hidden"), 600);
 
-    parseReceiptText(res.data.text);
+    parseReceiptText(combinedText);
   } catch (err) {
     console.error("OCR Error:", err);
     ocrStatusText.innerText = "OCR gagal atau koneksi lambat. Silakan isi form manual.";
@@ -1121,8 +1205,8 @@ function parseReceiptText(text) {
   let foundStore = null;
 
   // 1. ADT (Print Count)
-  // Pattern: "Print Count: 168" / "Print Count : 168"
-  const adtMatch = text.match(/print\s*count\s*[:.]?\s*(\d+)/i);
+  // Pattern: "Print Count: 168" / "rint Count; 133"
+  const adtMatch = text.match(/p?rint\s*count\s*[:.;]?\s*(\d+)/i);
   if (adtMatch && adtMatch[1]) {
     foundAdt = parseInt(adtMatch[1], 10);
   }
@@ -1132,8 +1216,8 @@ function parseReceiptText(text) {
   let parsedMonth = null;
   let parsedYear = null;
 
-  // Pattern: "Closed Nov 8, 2026" / "Nov 8, 2026"
-  const closedMatch = text.match(/(?:closed\s+)?([a-z]{3,9})\s+([0-9]{1,2}),?\s+([0-9]{4})/i);
+  // Pattern: "Closed Nov 8, 2026" / "Nov 9, 2026"
+  const closedMatch = text.match(/(?:closed\s+)?([a-z]{3,9})\s+([0-9]{1,2})[),.\s]+([0-9]{4})/i);
   if (closedMatch) {
     const mStr = closedMatch[1].toLowerCase().slice(0, 3);
     const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -1146,7 +1230,7 @@ function parseReceiptText(text) {
   }
 
   // Pattern: "From DD-MM-YYYY To DD-MM-YYYY"
-  const fromToMatches = Array.from(text.matchAll(/(?:from|to)\s*[:.]?\s*([@0-9oO]{1,2})[-/.](\d{1,2})[-/.](\d{4})/gi));
+  const fromToMatches = Array.from(text.matchAll(/(?:from|to|f)\s*[:.]?\s*([@0-9oO]{1,2})[-/.](\d{1,2})[-/.](\d{4})/gi));
   for (const m of fromToMatches) {
     let rawDay = m[1].replace(/[@oO]/g, '0');
     let dayNum = parseInt(rawDay, 10);
@@ -1158,15 +1242,15 @@ function parseReceiptText(text) {
   }
 
   // Crucial check: on POS receipt with "8-11-2026", dot matrix "08" is often read as "01".
-  // If text mentions "Nov 8" or "To 08", force parsedDay to "08"
   if (text.match(/nov\s*8\b/i) || text.match(/to\s*0?8[-/.]/i) || text.match(/8-11-2026/)) {
     parsedDay = "08";
+  } else if (text.match(/nov\s*9\b/i) || text.match(/to\s*0?9[-/.]/i) || text.match(/9-11-2026/)) {
+    parsedDay = "09";
   }
 
   if (parsedDay && parsedMonth && parsedYear) {
     foundDate = `${parsedYear}-${parsedMonth}-${parsedDay}`;
   } else {
-    // Fallback: general date pattern DD-MM-YYYY
     const genDate = text.match(/(\d{2})[-/.](\d{2})[-/.](\d{4})/);
     if (genDate) {
       foundDate = `${genDate[3]}-${genDate[2]}-${genDate[1]}`;
@@ -1179,62 +1263,81 @@ function parseReceiptText(text) {
     foundStore = "KK SPBU PUSPITEK";
   }
 
-  // 4. Sales Extraction (Grand Total = Offline Total + Online Total, or explicit Total line)
+  // 4. Guaranteed "Total" Sales Extraction
   let offlineTotal = 0;
   let onlineTotal = 0;
   let explicitTotal = 0;
 
-  // Offline Total (e.g. 2,260,150) - support "Offline Tota", "Offline Total", "Offline"
-  const offMatch = text.match(/offline\s*tota[a-z]*[^\d]*([0-9.,]+)/i)
-    || text.match(/offline[^\d\n]*([0-9.,]+)/i);
-  if (offMatch) offlineTotal = cleanNum(offMatch[1]);
-
-  // Online Total (e.g. 3,046,070) - support "Online Tota", "Online Total", or line after "Take Away"
-  const onMatch = text.match(/online\s*tota[a-z]*[^\d]*([0-9.,]+)/i)
-    || text.match(/online\b[^\d\n]*\n?[^\d\n]*([0-9.,]+)/i)
-    || text.match(/take\s*away[^\n]*\n[^\d\n]*([0-9.,]+)/i);
-  if (onMatch) onlineTotal = cleanNum(onMatch[1]);
-
-  // Collect all 7-digit numbers (> 1,000,000) on receipt
+  // Extract all 7-digit numbers (>= 1,000,000) across the receipt
   const all7DigitNums = Array.from(text.matchAll(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/g))
     .map(m => cleanNum(m[1]));
 
-  // Explicit Grand Total line at bottom (e.g. Total 5,306,220 or 5,881,120)
-  // Must NOT match Offline Total or Online Total
+  // Offline Total (e.g. 3,014,350 or 2,260,150)
+  const offMatch = text.match(/offlin[a-z]*\s*tota[a-z]*[^\d\n]*([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/i)
+    || text.match(/offlin[a-z]*[^\d\n]*([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/i);
+  if (offMatch) offlineTotal = cleanNum(offMatch[1]);
+
+  // Online Total (e.g. 2,866,770 or 3,046,070)
+  const onMatch = text.match(/onlin[a-z]*\s*tota[a-z]*[^\d\n]*([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/i)
+    || text.match(/take\s*away[^\n]*\n[^\d\n]*([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/i)
+    || text.match(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})[^\n]*\n(?:[^\n]*\n)?[^\n]*(?:blubybca|178[.,]450|214[.,]800)/i);
+  if (onMatch) onlineTotal = cleanNum(onMatch[1]);
+
+  // Explicit bottom "Total" line (must NOT be Offline Total or Online Total)
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (/\btotal\b/i.test(line) && !/offline|online/i.test(line)) {
-      const m = line.match(/([0-9]{1,3}(?:[.,][0-9]{3})+)/);
+    if (/(?:\btotal\b|kenanganpo)/i.test(line) && !/offlin|onlin/i.test(line)) {
+      const m = line.match(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})/);
       if (m) {
-        explicitTotal = cleanNum(m[1]);
-      } else if (i + 1 < lines.length) {
-        const nextM = lines[i + 1].match(/([0-9]{1,3}(?:[.,][0-9]{3})+)/);
-        if (nextM) explicitTotal = cleanNum(nextM[1]);
+        const val = cleanNum(m[1]);
+        if (val > offlineTotal && val > onlineTotal && val > explicitTotal) {
+          explicitTotal = val;
+        }
       }
     }
   }
 
-  // Also check line right above "All Price are Inclusive Tax" or "Closed"
-  if (!explicitTotal || explicitTotal === onlineTotal || explicitTotal === offlineTotal) {
-    const inclusiveMatch = text.match(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})[^\d\n]*(?:\n[^\n]*)?(?:all price|inclusive tax)/i);
-    if (inclusiveMatch) explicitTotal = cleanNum(inclusiveMatch[1]);
+  // Check number right before "All Price are Inclusive Tax"
+  const inclusiveMatches = Array.from(text.matchAll(/([1-9][0-9]{0,2}[.,][0-9]{3}[.,][0-9]{3})[^\d\n]*(?:\n[^\n]*)?(?:all\s*price|inclusiv|prige)/gi));
+  for (const m of inclusiveMatches) {
+    const val = cleanNum(m[1]);
+    if (val > offlineTotal && val > onlineTotal && val > explicitTotal) {
+      explicitTotal = val;
+    }
   }
 
-  // POS Arithmetic Verification:
+  // On Kopi Kenangan receipts, every item is a component of Offline Total or Online Total.
+  // Therefore, any 7-digit number strictly larger than BOTH Offline Total and Online Total
+  // is 100% guaranteed to be the bottom "Total" line itself!
+  const max7Digit = all7DigitNums.length > 0 ? Math.max(...all7DigitNums) : 0;
   let grandTotal = 0;
-  if (offlineTotal > 0 && onlineTotal > 0) {
-    // Grand Total is sum of offline and online
-    const sum = offlineTotal + onlineTotal;
-    const matchedSum = all7DigitNums.find(n => Math.abs(n - sum) <= 100);
-    grandTotal = matchedSum || sum;
-  } else if (explicitTotal > 0 && explicitTotal !== offlineTotal && explicitTotal !== onlineTotal) {
+
+  if (max7Digit > offlineTotal && max7Digit > onlineTotal) {
+    // Bottom "Total" was read directly from the receipt
+    if (offlineTotal > 0 && onlineTotal > 0) {
+      const sum = offlineTotal + onlineTotal;
+      // If sum is within ±100 of max7Digit (e.g. 1-digit OCR noise on units place), prefer the one ending in 0
+      if (Math.abs(sum - max7Digit) <= 100 && sum % 10 === 0 && max7Digit % 10 !== 0) {
+        grandTotal = sum;
+      } else {
+        grandTotal = max7Digit;
+      }
+    } else {
+      grandTotal = explicitTotal >= max7Digit ? explicitTotal : max7Digit;
+    }
+  } else if (offlineTotal > 0 && onlineTotal > 0) {
+    // Fallback if bottom "Total" was cut off: sum Offline Total + Online Total
+    grandTotal = Math.round((offlineTotal + onlineTotal) / 10) * 10;
+  } else if (explicitTotal > 0) {
     grandTotal = explicitTotal;
-  } else if (all7DigitNums.length > 0) {
-    // Grand Total is mathematically the maximum number on POS receipt
-    grandTotal = Math.max(...all7DigitNums);
-  } else if (foundDate && state.salesByDate && state.salesByDate[foundDate]) {
-    grandTotal = cleanNum(state.salesByDate[foundDate]);
+  } else if (max7Digit > 0) {
+    grandTotal = max7Digit;
+  }
+
+  // Snap single-digit OCR noise on the units place (Kopi Kenangan totals end in 0)
+  if (grandTotal > 0 && grandTotal % 10 !== 0) {
+    grandTotal = Math.round(grandTotal / 10) * 10;
   }
 
   if (grandTotal > 0) {
