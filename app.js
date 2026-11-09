@@ -1216,11 +1216,12 @@ function parseReceiptText(text) {
   }
 
   // Select Best Sales:
-  if (explicitTotal > 1000000) {
-    foundSales = formatRupiah(explicitTotal);
-  } else if (offlineTotal > 0 && onlineTotal > 0) {
+  if (offlineTotal > 0 && onlineTotal > 0) {
+    // POS Math Verified: Grand Total = Offline Total + Online Total
     const sumTotal = offlineTotal + onlineTotal;
     foundSales = formatRupiah(sumTotal);
+  } else if (explicitTotal > 1000000) {
+    foundSales = formatRupiah(explicitTotal);
   } else if (foundDate && state.salesByDate && state.salesByDate[foundDate]) {
     // If OCR couldn't read bottom total, fallback to the known sales for this exact date!
     foundSales = state.salesByDate[foundDate];
