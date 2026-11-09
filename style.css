@@ -1025,6 +1025,48 @@ textarea:focus {
   border: 1px solid #2A3942;
 }
 
+.wa-warning-box {
+  background: #FFFBEB;
+  border: 1.5px solid #F59E0B;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #92400E;
+}
+
+.wa-warning-box strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #B45309;
+  margin-bottom: 4px;
+}
+
+.wa-warning-box p {
+  margin: 0;
+}
+
+[data-theme="dark"] .wa-warning-box {
+  background: #2C2012;
+  border-color: #D97706;
+  color: #FDE68A;
+}
+
+[data-theme="dark"] .wa-warning-box strong {
+  color: #FBBF24;
+}
+
+.btn-cloud-save-bottom {
+  background: var(--color-primary);
+  color: #FFFFFF;
+  box-shadow: 0 3px 10px rgba(140, 74, 40, 0.25);
+}
+
+.btn-cloud-save-bottom:hover {
+  background: var(--color-primary-dark);
+}
+
 .action-buttons-group {
   display: flex;
   gap: 10px;

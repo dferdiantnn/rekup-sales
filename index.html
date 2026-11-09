@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.4.0">
+  <link rel="stylesheet" href="style.css?v=2.4.1">
   <!-- Tesseract.js for client-side OCR (Runs 100% in browser, completely free & offline-ready after load) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -283,6 +283,15 @@
       </div>
       <textarea id="outputWhatsapp" class="wa-preview-text" readonly rows="18"></textarea>
 
+      <div class="wa-warning-box">
+        <strong>⚠️ Peringatan — Cek Kembali Secara Rinci!</strong>
+        <p>Pastikan semua angka (Tanggal, Sales, ADT, AT, Rincian Menu, dan Compare Mingguan) sudah benar dan tidak ada yang keliru. Jika masih ada angka yang salah, silakan ubah/revisi langsung pada masing-masing kolom input satuan di atas, lalu klik <b>☁️ Simpan Online</b> sebelum dikirim ke WhatsApp.</p>
+      </div>
+
+      <button type="button" class="btn btn-cloud-save-bottom" id="btnCloudSaveBottom" title="Simpan semua perubahan ke Firebase sebelum kirim ke WhatsApp">
+        ☁️ Simpan Online
+      </button>
+
       <div class="action-buttons-group">
         <button type="button" class="btn btn-secondary" id="btnCopyWa">
           📋 Salin Teks Format WA
@@ -323,6 +332,6 @@
     </footer>
   </div>
 
-  <script src="app.js?v=2.4.0"></script>
+  <script src="app.js?v=2.4.1"></script>
 </body>
 </html>

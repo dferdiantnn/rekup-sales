@@ -969,6 +969,13 @@ document.getElementById("btnCloudSave").addEventListener("click", () => {
   saveToCloud(false);
 });
 
+const btnCloudSaveBottom = document.getElementById("btnCloudSaveBottom");
+if (btnCloudSaveBottom) {
+  btnCloudSaveBottom.addEventListener("click", () => {
+    saveToCloud(false);
+  });
+}
+
 document.getElementById("btnCloudLoad").addEventListener("click", () => {
   loadFromCloud(false);
 });
