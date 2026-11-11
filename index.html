@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.4.1">
+  <link rel="stylesheet" href="style.css?v=2.5.0">
   <!-- Tesseract.js for client-side OCR (Runs 100% in browser, completely free & offline-ready after load) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -305,6 +305,117 @@
       </div>
     </section>
 
+    <!-- Photo Collage Builder & Editor (IG Story 9:16) -->
+    <section class="card collage-card" id="collageSection">
+      <div class="section-title">
+        <span>🖼️ Kolase Foto Laporan (IG Story 9:16)</span>
+        <span class="chip chip-accent">Maks 10 Foto</span>
+      </div>
+      <p class="section-desc">Gabungkan 3, 5, hingga 10 foto (5 kiri & 5 kanan) dari galeri HP (mendukung semua format gambar: JPG, PNG, HEIC, WEBP, dll) menjadi 1 gambar ukuran Instagram Story (1080×1920).</p>
+
+      <input type="file" id="collageFileInput" accept="image/*,.heic,.heif,.webp,.avif,.bmp,.gif,.png,.jpg,.jpeg" multiple class="hidden">
+
+      <div class="collage-upload-bar">
+        <button type="button" class="btn btn-scan-camera" id="btnPickCollagePhotos">
+          🖼️ Pilih Foto dari Galeri (<span id="collageCountLabel">0</span>/10)
+        </button>
+        <button type="button" class="btn-ghost-sm hidden" id="btnClearCollagePhotos">
+          🗑️ Hapus Semua
+        </button>
+      </div>
+
+      <!-- Selected Thumbnails Strip -->
+      <div class="collage-thumbs-strip hidden" id="collageThumbsStrip"></div>
+
+      <!-- Generate Button -->
+      <button type="button" class="btn btn-generate-collage hidden" id="btnGenerateCollage">
+        ⚡ Generate & Atur Posisi Kolase
+      </button>
+
+      <!-- Interactive Lightweight Collage Editor -->
+      <div class="collage-editor-wrap hidden" id="collageEditorWrap">
+        <div class="collage-layout-bar">
+          <div class="form-group flex-1">
+            <label for="collageLayoutSelect">Tata Letak (Layout 9:16)</label>
+            <select id="collageLayoutSelect">
+              <option value="split-lr">2 Kolom: Kiri & Kanan (Maks 5 Kiri, 5 Kanan)</option>
+              <option value="grid-even">Grid Rata (Otomatis Penuh)</option>
+              <option value="stack-v">Susun Vertikal (Atas ke Bawah)</option>
+            </select>
+          </div>
+          <div class="form-group" style="width: 110px;">
+            <label for="collageGapRange">Jarak Garis</label>
+            <input type="range" id="collageGapRange" min="0" max="24" value="8">
+          </div>
+        </div>
+
+        <div class="collage-helper-banner">
+          👆 <b>Cara Edit:</b> Ketuk kotak foto lalu <b>geser dengan jari</b> untuk memosisikan gambar. Gunakan tombol di bawah untuk <b>Zoom In/Out</b>, <b>Crop Penuh/Utuh</b>, atau <b>Tukar Urutan</b>.
+        </div>
+
+        <!-- 9:16 Canvas Viewport -->
+        <div class="collage-canvas-stage">
+          <canvas id="collageCanvas" width="1080" height="1920"></canvas>
+        </div>
+
+        <!-- Active Slot Controls (Zoom, Pan, Crop Mode, Rotate, Swap) -->
+        <div class="collage-controls-panel">
+          <div class="collage-slot-header">
+            <strong id="activeSlotTitle">Foto #1 Terpilih</strong>
+            <div class="slot-quick-btns">
+              <button type="button" class="btn-slot-sm" id="btnSlotFitToggle" title="Ubah Crop Penuh / Utuh">📐 Mode: Penuh (Crop)</button>
+              <button type="button" class="btn-slot-sm" id="btnSlotRotate" title="Putar 90 Derajat">🔄 Putar 90°</button>
+              <button type="button" class="btn-slot-sm" id="btnSlotReset" title="Reset posisi & zoom">↺ Reset</button>
+            </div>
+          </div>
+
+          <!-- Zoom Controls -->
+          <div class="collage-zoom-row">
+            <span>🔍 Zoom:</span>
+            <button type="button" class="btn-zoom-step" id="btnZoomOut">➖</button>
+            <input type="range" id="collageZoomRange" min="20" max="350" value="100">
+            <button type="button" class="btn-zoom-step" id="btnZoomIn">➕</button>
+            <b id="collageZoomVal">100%</b>
+          </div>
+
+          <!-- Fine Position / Swap Controls -->
+          <div class="collage-nudge-row">
+            <div class="nudge-group">
+              <small>Geser Halus:</small>
+              <button type="button" class="btn-nudge" data-dx="-25" data-dy="0">⬅️</button>
+              <button type="button" class="btn-nudge" data-dx="0" data-dy="-25">⬆️</button>
+              <button type="button" class="btn-nudge" data-dx="0" data-dy="25">⬇️</button>
+              <button type="button" class="btn-nudge" data-dx="25" data-dy="0">➡️</button>
+            </div>
+            <div class="nudge-group">
+              <small>Urutan Kotak:</small>
+              <button type="button" class="btn-slot-sm" id="btnSwapPrev">⬆️ Maju</button>
+              <button type="button" class="btn-slot-sm" id="btnSwapNext">⬇️ Mundur</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save to Gallery Actions -->
+        <div class="collage-save-actions">
+          <button type="button" class="btn btn-save-gallery" id="btnSaveCollageGallery">
+            📲 Simpan PNG ke Galeri HP
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnDownloadCollagePng">
+            ⬇️ Unduh PNG (1080×1920)
+          </button>
+        </div>
+
+        <!-- Direct Gallery Save Preview Box (For iOS/Android Long-Press Save to Photos) -->
+        <div class="collage-result-box hidden" id="collageResultBox">
+          <div class="result-box-header">
+            <strong>✅ Gambar PNG Siap Disimpan ke Galeri!</strong>
+            <small>Tips HP: Jika menu Share tidak muncul otomatis, <b>tekan & tahan (long-press) gambar di bawah</b> lalu pilih <b>"Simpan ke Foto / Simpan Gambar"</b> agar langsung masuk ke Galeri Foto (bukan Dokumen).</small>
+          </div>
+          <img id="collageResultImg" alt="Hasil Kolase PNG">
+        </div>
+      </div>
+    </section>
+
     <!-- Sub-item Modal / Bottom Sheet -->
     <div class="modal-backdrop hidden" id="itemModal">
       <div class="modal-sheet">
@@ -332,6 +443,6 @@
     </footer>
   </div>
 
-  <script src="app.js?v=2.4.1"></script>
+  <script src="app.js?v=2.5.0"></script>
 </body>
 </html>

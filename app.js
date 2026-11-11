@@ -1058,6 +1058,9 @@ function cleanDailyForm() {
     if (bulkCategoryText) {
       bulkCategoryText.value = "";
     }
+    if (typeof clearAllCollagePhotos === "function") {
+      clearAllCollagePhotos();
+    }
 
     renderAll();
     saveLocalState();
@@ -1444,6 +1447,634 @@ function initTheme() {
 }
 
 // ==========================================
+// Photo Collage Builder & Editor (IG Story 1080x1920)
+// ==========================================
+
+const COLLAGE_W = 1080;
+const COLLAGE_H = 1920;
+const MAX_COLLAGE_PHOTOS = 10;
+
+let collageItems = [];
+let collageRects = [];
+let activeCollageIndex = 0;
+
+const collageFileInput = document.getElementById("collageFileInput");
+const btnPickCollagePhotos = document.getElementById("btnPickCollagePhotos");
+const btnClearCollagePhotos = document.getElementById("btnClearCollagePhotos");
+const collageCountLabel = document.getElementById("collageCountLabel");
+const collageThumbsStrip = document.getElementById("collageThumbsStrip");
+const btnGenerateCollage = document.getElementById("btnGenerateCollage");
+const collageEditorWrap = document.getElementById("collageEditorWrap");
+const collageLayoutSelect = document.getElementById("collageLayoutSelect");
+const collageGapRange = document.getElementById("collageGapRange");
+const collageCanvas = document.getElementById("collageCanvas");
+const activeSlotTitle = document.getElementById("activeSlotTitle");
+const btnSlotFitToggle = document.getElementById("btnSlotFitToggle");
+const btnSlotRotate = document.getElementById("btnSlotRotate");
+const btnSlotReset = document.getElementById("btnSlotReset");
+const collageZoomRange = document.getElementById("collageZoomRange");
+const collageZoomVal = document.getElementById("collageZoomVal");
+const btnZoomOut = document.getElementById("btnZoomOut");
+const btnZoomIn = document.getElementById("btnZoomIn");
+const btnSwapPrev = document.getElementById("btnSwapPrev");
+const btnSwapNext = document.getElementById("btnSwapNext");
+const btnSaveCollageGallery = document.getElementById("btnSaveCollageGallery");
+const btnDownloadCollagePng = document.getElementById("btnDownloadCollagePng");
+const collageResultBox = document.getElementById("collageResultBox");
+const collageResultImg = document.getElementById("collageResultImg");
+
+// Universal image decoder: supports JPG, PNG, WEBP, GIF, BMP, AVIF, and HEIC/HEIF
+async function loadAnyImageFile(file) {
+  const tryLoadBlob = (blob) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => resolve({ img, url });
+    img.onerror = (err) => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+
+  try {
+    return await tryLoadBlob(file);
+  } catch (firstErr) {
+    // Fallback 1: createImageBitmap (handles extra formats in modern mobile browsers)
+    if (typeof createImageBitmap === "function") {
+      try {
+        const bmp = await createImageBitmap(file);
+        const tmp = document.createElement("canvas");
+        tmp.width = bmp.width;
+        tmp.height = bmp.height;
+        tmp.getContext("2d").drawImage(bmp, 0, 0);
+        const blob = await new Promise(res => tmp.toBlob(res, "image/png"));
+        if (blob) return await tryLoadBlob(blob);
+      } catch (e) {}
+    }
+
+    // Fallback 2: On-demand HEIC/HEIF conversion via heic2any CDN
+    if (!window.heic2any) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    const converted = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+    const targetBlob = Array.isArray(converted) ? converted[0] : converted;
+    return await tryLoadBlob(targetBlob);
+  }
+}
+
+function updateCollageThumbsUI() {
+  if (!collageCountLabel) return;
+  collageCountLabel.textContent = collageItems.length;
+
+  if (collageItems.length === 0) {
+    collageThumbsStrip.classList.add("hidden");
+    btnClearCollagePhotos.classList.add("hidden");
+    btnGenerateCollage.classList.add("hidden");
+    collageEditorWrap.classList.add("hidden");
+    collageResultBox.classList.add("hidden");
+    return;
+  }
+
+  collageThumbsStrip.classList.remove("hidden");
+  btnClearCollagePhotos.classList.remove("hidden");
+  btnGenerateCollage.classList.remove("hidden");
+
+  collageThumbsStrip.innerHTML = "";
+  collageItems.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = `collage-thumb-item ${idx === activeCollageIndex ? "active-thumb" : ""}`;
+    div.innerHTML = `
+      <img src="${item.url}" alt="Foto ${idx + 1}">
+      <span class="collage-thumb-badge">#${idx + 1}</span>
+      <button type="button" class="collage-thumb-del" title="Hapus foto">&times;</button>
+    `;
+    div.addEventListener("click", (e) => {
+      if (e.target.classList.contains("collage-thumb-del")) return;
+      selectCollageSlot(idx);
+    });
+    div.querySelector(".collage-thumb-del").addEventListener("click", (e) => {
+      e.stopPropagation();
+      URL.revokeObjectURL(collageItems[idx].url);
+      collageItems.splice(idx, 1);
+      if (activeCollageIndex >= collageItems.length) {
+        activeCollageIndex = Math.max(0, collageItems.length - 1);
+      }
+      updateCollageThumbsUI();
+      if (collageItems.length > 0 && !collageEditorWrap.classList.contains("hidden")) {
+        selectCollageSlot(activeCollageIndex);
+      }
+    });
+    collageThumbsStrip.appendChild(div);
+  });
+}
+
+function clearAllCollagePhotos() {
+  collageItems.forEach(it => {
+    try { URL.revokeObjectURL(it.url); } catch (e) {}
+  });
+  collageItems = [];
+  collageRects = [];
+  activeCollageIndex = 0;
+  if (collageFileInput) collageFileInput.value = "";
+  updateCollageThumbsUI();
+}
+
+// Compute 9:16 (1080x1920) slot rectangles
+function computeCollageRects(count, layoutMode, gap) {
+  const rects = [];
+  if (count <= 0) return rects;
+
+  if (count === 1) {
+    rects.push({ x: gap, y: gap, w: COLLAGE_W - gap * 2, h: COLLAGE_H - gap * 2 });
+    return rects;
+  }
+
+  if (layoutMode === "stack-v") {
+    const slotW = COLLAGE_W - gap * 2;
+    const slotH = (COLLAGE_H - gap * (count + 1)) / count;
+    for (let i = 0; i < count; i++) {
+      rects.push({
+        x: gap,
+        y: gap + i * (slotH + gap),
+        w: slotW,
+        h: slotH
+      });
+    }
+    return rects;
+  }
+
+  if (layoutMode === "grid-even") {
+    const rows = Math.ceil(count / 2);
+    const slotH = (COLLAGE_H - gap * (rows + 1)) / rows;
+    const halfW = (COLLAGE_W - gap * 3) / 2;
+    for (let i = 0; i < count; i++) {
+      const r = Math.floor(i / 2);
+      const isLastOdd = (i === count - 1) && (count % 2 === 1);
+      if (isLastOdd) {
+        rects.push({
+          x: gap,
+          y: gap + r * (slotH + gap),
+          w: COLLAGE_W - gap * 2,
+          h: slotH
+        });
+      } else {
+        const c = i % 2;
+        rects.push({
+          x: gap + c * (halfW + gap),
+          y: gap + r * (slotH + gap),
+          w: halfW,
+          h: slotH
+        });
+      }
+    }
+    return rects;
+  }
+
+  // Default "split-lr": Left column (up to 5) & Right column (up to 5)
+  const leftCount = Math.ceil(count / 2);
+  const rightCount = count - leftCount;
+  const colW = (COLLAGE_W - gap * 3) / 2;
+
+  const leftH = (COLLAGE_H - gap * (leftCount + 1)) / leftCount;
+  for (let i = 0; i < leftCount; i++) {
+    rects.push({
+      x: gap,
+      y: gap + i * (leftH + gap),
+      w: colW,
+      h: leftH
+    });
+  }
+
+  if (rightCount > 0) {
+    const rightH = (COLLAGE_H - gap * (rightCount + 1)) / rightCount;
+    for (let j = 0; j < rightCount; j++) {
+      rects.push({
+        x: gap * 2 + colW,
+        y: gap + j * (rightH + gap),
+        w: colW,
+        h: rightH
+      });
+    }
+  }
+
+  return rects;
+}
+
+function renderCollageCanvas(exportClean = false) {
+  if (!collageCanvas || collageItems.length === 0) return;
+  const ctx = collageCanvas.getContext("2d");
+  const layoutMode = collageLayoutSelect ? collageLayoutSelect.value : "split-lr";
+  const gap = collageGapRange ? parseInt(collageGapRange.value, 10) : 8;
+
+  collageRects = computeCollageRects(collageItems.length, layoutMode, gap);
+
+  // Background frame
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, COLLAGE_W, COLLAGE_H);
+
+  collageItems.forEach((item, idx) => {
+    const r = collageRects[idx];
+    if (!r) return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+
+    // Dark neutral backdrop behind contained images
+    ctx.fillStyle = "#181818";
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+
+    const cx = r.x + r.w / 2 + item.offsetX;
+    const cy = r.y + r.h / 2 + item.offsetY;
+    ctx.translate(cx, cy);
+    ctx.rotate((item.rotation * Math.PI) / 180);
+
+    const isRotated = Math.abs(item.rotation) % 180 === 90;
+    const iw = item.img.naturalWidth || item.img.width;
+    const ih = item.img.naturalHeight || item.img.height;
+    const effW = isRotated ? ih : iw;
+    const effH = isRotated ? iw : ih;
+
+    const baseScale = item.fitMode === "contain"
+      ? Math.min(r.w / effW, r.h / effH)
+      : Math.max(r.w / effW, r.h / effH);
+
+    const finalScale = baseScale * item.scale;
+    const drawW = iw * finalScale;
+    const drawH = ih * finalScale;
+
+    ctx.drawImage(item.img, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
+
+    // Editor overlay (Slot badge & active selection border — never drawn on exported PNG)
+    if (!exportClean) {
+      if (idx === activeCollageIndex) {
+        ctx.save();
+        ctx.strokeStyle = "#FF6B00";
+        ctx.lineWidth = 8;
+        ctx.strokeRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8);
+        ctx.restore();
+      }
+
+      // Slot number badge
+      ctx.save();
+      ctx.fillStyle = idx === activeCollageIndex ? "#FF6B00" : "rgba(0, 0, 0, 0.65)";
+      ctx.beginPath();
+      ctx.roundRect(r.x + 14, r.y + 14, 62, 42, 10);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 24px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`#${idx + 1}`, r.x + 45, r.y + 35);
+      ctx.restore();
+    }
+  });
+}
+
+function selectCollageSlot(idx) {
+  if (idx < 0 || idx >= collageItems.length) return;
+  activeCollageIndex = idx;
+  const item = collageItems[idx];
+
+  if (activeSlotTitle) activeSlotTitle.textContent = `Foto #${idx + 1} Terpilih`;
+  if (collageZoomRange) {
+    const pct = Math.round(item.scale * 100);
+    collageZoomRange.value = pct;
+    if (collageZoomVal) collageZoomVal.textContent = `${pct}%`;
+  }
+  if (btnSlotFitToggle) {
+    btnSlotFitToggle.textContent = item.fitMode === "contain"
+      ? "📐 Mode: Utuh (Fit)"
+      : "📐 Mode: Penuh (Crop)";
+  }
+
+  updateCollageThumbsUI();
+  renderCollageCanvas(false);
+}
+
+function initCollageEditor() {
+  if (!btnPickCollagePhotos || !collageFileInput) return;
+
+  btnPickCollagePhotos.addEventListener("click", () => {
+    if (collageItems.length >= MAX_COLLAGE_PHOTOS) {
+      showToast("Maksimal 10 foto dalam 1 kolase! Hapus salah satu jika ingin ganti.");
+      return;
+    }
+    collageFileInput.value = "";
+    collageFileInput.click();
+  });
+
+  btnClearCollagePhotos.addEventListener("click", () => {
+    if (confirm("Hapus semua foto kolase yang dipilih?")) {
+      clearAllCollagePhotos();
+    }
+  });
+
+  collageFileInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remaining = MAX_COLLAGE_PHOTOS - collageItems.length;
+    const toProcess = files.slice(0, remaining);
+    if (files.length > remaining) {
+      showToast(`Maksimal ${MAX_COLLAGE_PHOTOS} foto! ${remaining} foto pertama dimasukkan.`);
+    }
+
+    showToast("Memuat foto dari galeri...");
+    for (const f of toProcess) {
+      try {
+        const loaded = await loadAnyImageFile(f);
+        collageItems.push({
+          id: Date.now() + Math.random(),
+          img: loaded.img,
+          url: loaded.url,
+          scale: 1,
+          offsetX: 0,
+          offsetY: 0,
+          rotation: 0,
+          fitMode: "cover"
+        });
+      } catch (err) {
+        console.warn("Gagal memuat gambar:", f.name, err);
+        showToast(`Gagal membaca file: ${f.name}`);
+      }
+    }
+
+    updateCollageThumbsUI();
+    if (collageItems.length > 0) {
+      collageEditorWrap.classList.remove("hidden");
+      selectCollageSlot(activeCollageIndex);
+    }
+  });
+
+  btnGenerateCollage.addEventListener("click", () => {
+    if (collageItems.length === 0) return;
+    collageEditorWrap.classList.remove("hidden");
+    selectCollageSlot(activeCollageIndex);
+    collageCanvas.scrollIntoView({ behavior: "smooth", block: "center" });
+    showToast("Kolase siap diatur! Geser foto dengan jari untuk memosisikan ✨");
+  });
+
+  collageLayoutSelect.addEventListener("change", () => renderCollageCanvas(false));
+  collageGapRange.addEventListener("input", () => renderCollageCanvas(false));
+
+  // Toolbar controls
+  btnSlotFitToggle.addEventListener("click", () => {
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    item.fitMode = item.fitMode === "cover" ? "contain" : "cover";
+    item.offsetX = 0;
+    item.offsetY = 0;
+    item.scale = 1;
+    selectCollageSlot(activeCollageIndex);
+  });
+
+  btnSlotRotate.addEventListener("click", () => {
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    item.rotation = (item.rotation + 90) % 360;
+    renderCollageCanvas(false);
+  });
+
+  btnSlotReset.addEventListener("click", () => {
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    item.scale = 1;
+    item.offsetX = 0;
+    item.offsetY = 0;
+    item.rotation = 0;
+    selectCollageSlot(activeCollageIndex);
+  });
+
+  collageZoomRange.addEventListener("input", (e) => {
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    const pct = parseInt(e.target.value, 10);
+    item.scale = pct / 100;
+    if (collageZoomVal) collageZoomVal.textContent = `${pct}%`;
+    renderCollageCanvas(false);
+  });
+
+  btnZoomOut.addEventListener("click", () => {
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    item.scale = Math.max(0.2, Math.round((item.scale - 0.1) * 100) / 100);
+    selectCollageSlot(activeCollageIndex);
+  });
+
+  btnZoomIn.addEventListener("click", () => {
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    item.scale = Math.min(3.5, Math.round((item.scale + 0.1) * 100) / 100);
+    selectCollageSlot(activeCollageIndex);
+  });
+
+  document.querySelectorAll(".btn-nudge").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const item = collageItems[activeCollageIndex];
+      if (!item) return;
+      item.offsetX += parseInt(btn.dataset.dx || "0", 10);
+      item.offsetY += parseInt(btn.dataset.dy || "0", 10);
+      renderCollageCanvas(false);
+    });
+  });
+
+  btnSwapPrev.addEventListener("click", () => {
+    if (activeCollageIndex <= 0) return;
+    const prev = activeCollageIndex - 1;
+    const tmp = collageItems[activeCollageIndex];
+    collageItems[activeCollageIndex] = collageItems[prev];
+    collageItems[prev] = tmp;
+    selectCollageSlot(prev);
+  });
+
+  btnSwapNext.addEventListener("click", () => {
+    if (activeCollageIndex >= collageItems.length - 1) return;
+    const next = activeCollageIndex + 1;
+    const tmp = collageItems[activeCollageIndex];
+    collageItems[activeCollageIndex] = collageItems[next];
+    collageItems[next] = tmp;
+    selectCollageSlot(next);
+  });
+
+  // Direct Touch & Mouse Drag / Pinch-to-Zoom on Canvas
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let initialPinchDist = null;
+  let initialPinchScale = 1;
+
+  function clientToCanvasCoords(clientX, clientY) {
+    const bounds = collageCanvas.getBoundingClientRect();
+    const scaleX = COLLAGE_W / bounds.width;
+    const scaleY = COLLAGE_H / bounds.height;
+    return {
+      x: (clientX - bounds.left) * scaleX,
+      y: (clientY - bounds.top) * scaleY,
+      scaleX,
+      scaleY
+    };
+  }
+
+  function findSlotAt(cx, cy) {
+    for (let i = 0; i < collageRects.length; i++) {
+      const r = collageRects[i];
+      if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  collageCanvas.addEventListener("mousedown", (e) => {
+    const pt = clientToCanvasCoords(e.clientX, e.clientY);
+    const hit = findSlotAt(pt.x, pt.y);
+    if (hit !== -1) selectCollageSlot(hit);
+    isDragging = true;
+    dragStartX = pt.x;
+    dragStartY = pt.y;
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+    const pt = clientToCanvasCoords(e.clientX, e.clientY);
+    item.offsetX += pt.x - dragStartX;
+    item.offsetY += pt.y - dragStartY;
+    dragStartX = pt.x;
+    dragStartY = pt.y;
+    renderCollageCanvas(false);
+  });
+
+  window.addEventListener("mouseup", () => {
+    isDragging = false;
+  });
+
+  collageCanvas.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const pt = clientToCanvasCoords(t.clientX, t.clientY);
+      const hit = findSlotAt(pt.x, pt.y);
+      if (hit !== -1) selectCollageSlot(hit);
+      isDragging = true;
+      dragStartX = pt.x;
+      dragStartY = pt.y;
+      initialPinchDist = null;
+    } else if (e.touches.length === 2) {
+      isDragging = false;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      initialPinchDist = Math.hypot(dx, dy);
+      const item = collageItems[activeCollageIndex];
+      initialPinchScale = item ? item.scale : 1;
+    }
+  }, { passive: false });
+
+  collageCanvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    const item = collageItems[activeCollageIndex];
+    if (!item) return;
+
+    if (e.touches.length === 1 && isDragging) {
+      const t = e.touches[0];
+      const pt = clientToCanvasCoords(t.clientX, t.clientY);
+      item.offsetX += pt.x - dragStartX;
+      item.offsetY += pt.y - dragStartY;
+      dragStartX = pt.x;
+      dragStartY = pt.y;
+      renderCollageCanvas(false);
+    } else if (e.touches.length === 2 && initialPinchDist) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const ratio = dist / initialPinchDist;
+      item.scale = Math.max(0.2, Math.min(3.5, Math.round(initialPinchScale * ratio * 100) / 100));
+      const pct = Math.round(item.scale * 100);
+      if (collageZoomRange) collageZoomRange.value = pct;
+      if (collageZoomVal) collageZoomVal.textContent = `${pct}%`;
+      renderCollageCanvas(false);
+    }
+  }, { passive: false });
+
+  collageCanvas.addEventListener("touchend", () => {
+    isDragging = false;
+    initialPinchDist = null;
+  });
+
+  // Save / Export PNG to Phone Gallery
+  async function exportCollagePng(preferShareToGallery) {
+    if (collageItems.length === 0) return;
+    // Render clean 1080x1920 without badges/selection border
+    renderCollageCanvas(true);
+
+    const blob = await new Promise(resolve => collageCanvas.toBlob(resolve, "image/png"));
+    // Restore editor UI overlay immediately
+    renderCollageCanvas(false);
+
+    if (!blob) {
+      showToast("Gagal membuat gambar PNG.");
+      return;
+    }
+
+    const fileName = `kolase-sales-${state.reportDate || "story"}.png`;
+    const dataUrl = URL.createObjectURL(blob);
+
+    // Always display inside the preview box so user can also long-press -> "Save to Photos / Simpan ke Galeri"
+    if (collageResultImg && collageResultBox) {
+      if (collageResultImg.dataset.prevUrl) {
+        try { URL.revokeObjectURL(collageResultImg.dataset.prevUrl); } catch (e) {}
+      }
+      collageResultImg.src = dataUrl;
+      collageResultImg.dataset.prevUrl = dataUrl;
+      collageResultBox.classList.remove("hidden");
+    }
+
+    // Method 1: Native Mobile Share Sheet ("Save Image / Simpan Gambar" saves directly to iOS/Android Photos Gallery!)
+    if (preferShareToGallery && navigator.canShare) {
+      try {
+        const file = new File([blob], fileName, { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: "Kolase Laporan Sales",
+            text: "Pilih 'Simpan Gambar / Save Image' agar langsung masuk ke Galeri Foto HP."
+          });
+          showToast("✅ Kolase PNG berhasil dibagikan / disimpan ke Galeri! 🖼️");
+          return;
+        }
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+      }
+    }
+
+    // Method 2: Direct PNG Download + Scroll to Long-Press Gallery Preview
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    if (collageResultBox) {
+      collageResultBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    showToast("✅ PNG diunduh! Tekan & tahan gambar di bawah -> 'Simpan ke Foto' agar masuk Galeri 📸");
+  }
+
+  btnSaveCollageGallery.addEventListener("click", () => exportCollagePng(true));
+  btnDownloadCollagePng.addEventListener("click", () => exportCollagePng(false));
+}
+
+// ==========================================
 // Live Realtime Clock & Date Sync Engine
 // ==========================================
 
@@ -1471,6 +2102,7 @@ function initApp() {
   pruneOldDatabaseHistory();
   renderAll();
   updateLiveClock();
+  initCollageEditor();
 
   // Sync to today's date
   const btnSyncToday = document.getElementById("btnSyncToday");
