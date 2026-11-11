@@ -409,6 +409,25 @@ function recalculateAchievement() {
   if (inputAchievement && !inputAchievement.dataset.manualOverride) {
     inputAchievement.value = state.achievement;
   }
+  updateTargetPercentUI();
+}
+
+function calculateTargetPercent() {
+  const targetVal = cleanNum(state.targetAmount);
+  const achieveVal = cleanNum(state.achievement);
+  if (targetVal > 0 && achieveVal >= 0) {
+    const pct = (achieveVal / targetVal) * 100;
+    const formatted = Number(pct.toFixed(2)).toString().replace(".", ",");
+    return `${formatted}%`;
+  }
+  return "-%";
+}
+
+function updateTargetPercentUI() {
+  const el = document.getElementById("displayTargetPct");
+  if (el) {
+    el.value = calculateTargetPercent();
+  }
 }
 
 // ==========================================
@@ -509,6 +528,7 @@ function renderAll() {
 
   monthNameInput.value = state.targetMonth || "November";
   inputTarget.value = state.targetAmount || "-";
+  updateTargetPercentUI();
 
   updateWhatsAppOutput();
 }
@@ -709,6 +729,7 @@ function generateWhatsAppText() {
 
   const targetLine = `*Target ${state.targetMonth || "November"}* : Rp. ${state.targetAmount || "-"}`;
   const achieveLine = `*Achievement* : Rp. ${state.achievement || "-"}`;
+  const pctLine = `presentase target tercapai sebesar ${calculateTargetPercent()}`;
 
   const report = `*REPORT SALES ${store}*
 
@@ -735,7 +756,8 @@ ${thisWeekLines}
 
 ${targetLine}
 
-${achieveLine}`;
+${achieveLine}
+${pctLine}`;
 
   return report;
 }
@@ -902,14 +924,24 @@ monthNameInput.addEventListener("input", (e) => {
 });
 
 inputTarget.addEventListener("input", (e) => {
-  state.targetAmount = e.target.value;
+  const raw = e.target.value.trim();
+  if (!raw || raw === "-") {
+    state.targetAmount = raw || "-";
+  } else {
+    state.targetAmount = formatRupiah(raw);
+    e.target.value = state.targetAmount;
+  }
+  updateTargetPercentUI();
   saveLocalState();
   updateWhatsAppOutput();
 });
 
 inputAchievement.addEventListener("input", (e) => {
   inputAchievement.dataset.manualOverride = "true";
-  state.achievement = e.target.value;
+  const raw = e.target.value.trim();
+  state.achievement = raw ? formatRupiah(raw) : "";
+  e.target.value = state.achievement;
+  updateTargetPercentUI();
   saveLocalState();
   updateWhatsAppOutput();
 });
