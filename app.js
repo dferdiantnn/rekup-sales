@@ -728,8 +728,7 @@ function generateWhatsAppText() {
   }).join("\n");
 
   const targetLine = `*Target ${state.targetMonth || "November"}* : Rp. ${state.targetAmount || "-"}`;
-  const achieveLine = `*Achievement* : Rp. ${state.achievement || "-"}`;
-  const pctLine = `presentase target tercapai sebesar ${calculateTargetPercent()}`;
+  const achieveLine = `*Achievement* : Rp. ${state.achievement || "-"} (${calculateTargetPercent()})`;
 
   const report = `*REPORT SALES ${store}*
 
@@ -756,8 +755,7 @@ ${thisWeekLines}
 
 ${targetLine}
 
-${achieveLine}
-${pctLine}`;
+${achieveLine}`;
 
   return report;
 }
