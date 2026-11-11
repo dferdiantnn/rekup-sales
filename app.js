@@ -379,12 +379,12 @@ function getWeekData() {
   };
 }
 
-// Calculate Achievement: Sum of all days in the current month up to reportDate
+// Calculate Achievement: Realtime sum of all filled days in the current month (from day 1 through all filled days in This Week)
 function recalculateAchievement() {
   const curDate = parseDateYMD(state.reportDate || "2026-11-08");
   const curYear = curDate.getFullYear();
   const curMonth = curDate.getMonth(); // 0-indexed
-  const curDayNum = curDate.getDate();
+  const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
   const todayYMD = formatDateYMD(curDate);
 
   // Target month name
@@ -393,20 +393,19 @@ function recalculateAchievement() {
   if (monthNameInput) monthNameInput.value = state.targetMonth;
 
   let totalMonthSales = 0;
-  // Iterate from day 1 to reportDate day in current month
-  for (let day = 1; day <= curDayNum; day++) {
+  // Sum from day 1 across all filled dates in the current month (including Minggu Ini / This Week inputs)
+  for (let day = 1; day <= daysInMonth; day++) {
     const d = new Date(curYear, curMonth, day);
     const dStr = formatDateYMD(d);
-    if (dStr === todayYMD && state.sales) {
-      totalMonthSales += cleanNum(state.sales);
-    } else if (state.salesByDate[dStr]) {
-      totalMonthSales += cleanNum(state.salesByDate[dStr]);
+    const valStr = (dStr === todayYMD && state.sales) ? state.sales : state.salesByDate[dStr];
+    if (valStr) {
+      totalMonthSales += cleanNum(valStr);
     }
   }
 
   state.achievement = formatRupiah(totalMonthSales);
   const inputAchievement = document.getElementById("inputAchievement");
-  if (inputAchievement && !inputAchievement.dataset.manualOverride) {
+  if (inputAchievement) {
     inputAchievement.value = state.achievement;
   }
   updateTargetPercentUI();
