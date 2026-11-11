@@ -1585,23 +1585,23 @@ function clearAllCollagePhotos() {
   updateCollageThumbsUI();
 }
 
-// Compute 9:16 (1080x1920) slot rectangles (razor-thin inner grid lines only, no outer frame)
+// Compute 9:16 (1080x1920) slot rectangles
 function computeCollageRects(count, layoutMode, gap) {
   const rects = [];
   if (count <= 0) return rects;
 
   if (count === 1) {
-    rects.push({ x: 0, y: 0, w: COLLAGE_W, h: COLLAGE_H });
+    rects.push({ x: gap, y: gap, w: COLLAGE_W - gap * 2, h: COLLAGE_H - gap * 2 });
     return rects;
   }
 
   if (layoutMode === "stack-v") {
-    const slotW = COLLAGE_W;
-    const slotH = (COLLAGE_H - gap * (count - 1)) / count;
+    const slotW = COLLAGE_W - gap * 2;
+    const slotH = (COLLAGE_H - gap * (count + 1)) / count;
     for (let i = 0; i < count; i++) {
       rects.push({
-        x: 0,
-        y: i * (slotH + gap),
+        x: gap,
+        y: gap + i * (slotH + gap),
         w: slotW,
         h: slotH
       });
@@ -1611,23 +1611,23 @@ function computeCollageRects(count, layoutMode, gap) {
 
   if (layoutMode === "grid-even") {
     const rows = Math.ceil(count / 2);
-    const slotH = (COLLAGE_H - gap * (rows - 1)) / rows;
-    const halfW = (COLLAGE_W - gap) / 2;
+    const slotH = (COLLAGE_H - gap * (rows + 1)) / rows;
+    const halfW = (COLLAGE_W - gap * 3) / 2;
     for (let i = 0; i < count; i++) {
       const r = Math.floor(i / 2);
       const isLastOdd = (i === count - 1) && (count % 2 === 1);
       if (isLastOdd) {
         rects.push({
-          x: 0,
-          y: r * (slotH + gap),
-          w: COLLAGE_W,
+          x: gap,
+          y: gap + r * (slotH + gap),
+          w: COLLAGE_W - gap * 2,
           h: slotH
         });
       } else {
         const c = i % 2;
         rects.push({
-          x: c * (halfW + gap),
-          y: r * (slotH + gap),
+          x: gap + c * (halfW + gap),
+          y: gap + r * (slotH + gap),
           w: halfW,
           h: slotH
         });
@@ -1639,24 +1639,24 @@ function computeCollageRects(count, layoutMode, gap) {
   // Default "split-lr": Left column (up to 5) & Right column (up to 5)
   const leftCount = Math.ceil(count / 2);
   const rightCount = count - leftCount;
-  const colW = (COLLAGE_W - gap) / 2;
+  const colW = (COLLAGE_W - gap * 3) / 2;
 
-  const leftH = (COLLAGE_H - gap * (leftCount - 1)) / leftCount;
+  const leftH = (COLLAGE_H - gap * (leftCount + 1)) / leftCount;
   for (let i = 0; i < leftCount; i++) {
     rects.push({
-      x: 0,
-      y: i * (leftH + gap),
+      x: gap,
+      y: gap + i * (leftH + gap),
       w: colW,
       h: leftH
     });
   }
 
   if (rightCount > 0) {
-    const rightH = (COLLAGE_H - gap * (rightCount - 1)) / rightCount;
+    const rightH = (COLLAGE_H - gap * (rightCount + 1)) / rightCount;
     for (let j = 0; j < rightCount; j++) {
       rects.push({
-        x: colW + gap,
-        y: j * (rightH + gap),
+        x: gap * 2 + colW,
+        y: gap + j * (rightH + gap),
         w: colW,
         h: rightH
       });
@@ -1670,7 +1670,7 @@ function renderCollageCanvas(exportClean = false) {
   if (!collageCanvas || collageItems.length === 0) return;
   const ctx = collageCanvas.getContext("2d");
   const layoutMode = collageLayoutSelect ? collageLayoutSelect.value : "split-lr";
-  const gap = collageGapRange ? parseFloat(collageGapRange.value) : 2;
+  const gap = collageGapRange ? parseInt(collageGapRange.value, 10) : 8;
 
   collageRects = computeCollageRects(collageItems.length, layoutMode, gap);
 
