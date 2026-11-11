@@ -1348,8 +1348,34 @@ textarea:focus {
 /* Photo Collage Builder & Editor (IG Story 9:16) */
 .collage-upload-bar {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.target-gate-sheet {
+  max-width: 440px;
+  margin: auto;
+  border-radius: var(--radius-lg) !important;
+  border: 2px solid var(--color-primary);
+}
+
+.target-gate-alert {
+  background: #FFFBEB;
+  border: 1.5px solid #F59E0B;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #92400E;
+  line-height: 1.5;
+  text-align: center;
+}
+
+[data-theme="dark"] .target-gate-alert {
+  background: #2C2012;
+  border-color: #D97706;
+  color: #FDE68A;
 }
 
 .collage-thumbs-strip {

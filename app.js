@@ -10,18 +10,9 @@ const MONTH_NAMES_ID = [
 // Cloud Endpoint: Google Firebase Realtime Database (100% Free Google Spark Plan)
 const FIREBASE_DB_URL = "https://rekup-sales-default-rtdb.asia-southeast1.firebasedatabase.app/rekup_sales.json";
 
-// Initial historical sales by date (Disimpan di Cloud Firebase)
+// Initial historical sales by date (Disimpan di Cloud Firebase - Cukup 1 Bulan Berjalan mulai Tgl 1)
 const DEFAULT_SALES_BY_DATE = {
-  // Minggu 26 Okt - 1 Nov 2026 (Subtotal: 45.674.120)
-  "2026-10-26": "6.042.960", // Senin
-  "2026-10-27": "6.360.870", // Selasa
-  "2026-10-28": "5.247.960", // Rabu
-  "2026-10-29": "6.097.250", // Kamis
-  "2026-10-30": "6.805.570", // Jum'at
-  "2026-10-31": "8.067.690", // Sabtu
   "2026-11-01": "7.051.820", // Minggu
-  
-  // Minggu 2 Nov - 8 Nov 2026 (Subtotal: 45.166.240)
   "2026-11-02": "6.387.210", // Senin
   "2026-11-03": "7.246.840", // Selasa
   "2026-11-04": "6.068.030", // Rabu
@@ -50,8 +41,9 @@ const DEFAULT_STATE = {
   at: "35.007",
   categories: DEFAULT_CATEGORIES,
   salesByDate: DEFAULT_SALES_BY_DATE,
+  activeMonthKey: "2026-11",
   targetMonth: "November",
-  targetAmount: "-",
+  targetAmount: "",
   achievement: "52.218.060",
   lastCloudSync: null
 };
@@ -155,21 +147,41 @@ function loadLocalState() {
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
 
-// Hapus histori lama yang melebihi batas 2 minggu & bulan berjalan
+// Simpan database cukup 1 bulan penuh (Tgl 1 s/d akhir bulan 28/29/30/31)
+// & Auto-Reset saat masuk Tanggal 1 bulan baru berdasarkan waktu realtime
 function pruneOldDatabaseHistory() {
-  if (!state.salesByDate) return false;
-  const curDate = parseDateYMD(state.reportDate || "2026-11-08");
-  const thisMon = getMondayOfDate(curDate);
-  const twoWeeksAgoMon = addDays(thisMon, -14);
-  const curMonthStart = new Date(curDate.getFullYear(), curDate.getMonth(), 1);
-
-  // Batas tanggal terlama yang disimpan: yang paling awal antara 2 minggu lalu atau awal bulan
-  const minKeepDate = twoWeeksAgoMon < curMonthStart ? twoWeeksAgoMon : curMonthStart;
-  const minKeepStr = formatDateYMD(minKeepDate);
+  if (!state.salesByDate) state.salesByDate = {};
+  const now = new Date();
+  const realtimeMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const realtimeMonthName = MONTH_NAMES_ID[now.getMonth()];
 
   let purged = false;
+
+  // Jika waktu realtime sudah berganti ke bulan baru (Tanggal 1 bulan baru), auto-refresh data bulanan & kosongkan target
+  if (state.activeMonthKey && state.activeMonthKey !== realtimeMonthKey) {
+    state.activeMonthKey = realtimeMonthKey;
+    state.targetMonth = realtimeMonthName;
+    state.targetAmount = "";
+    state.sales = "";
+    state.adt = "";
+    state.at = "";
+    state.achievement = "0";
+    state.reportDate = formatDateYMD(now);
+    state.categories.forEach(c => {
+      c.qty = "";
+      c.nominal = "";
+      c.subItems = [];
+    });
+    purged = true;
+  } else if (!state.activeMonthKey) {
+    state.activeMonthKey = realtimeMonthKey;
+    state.targetMonth = realtimeMonthName;
+  }
+
+  // Hanya simpan data dari tanggal 1 sampai akhir bulan berjalan (28/29/30/31)
+  const monthPrefix = state.activeMonthKey || realtimeMonthKey;
   Object.keys(state.salesByDate).forEach(dStr => {
-    if (dStr < minKeepStr) {
+    if (!dStr.startsWith(monthPrefix)) {
       delete state.salesByDate[dStr];
       purged = true;
     }
@@ -530,6 +542,9 @@ function renderAll() {
   updateTargetPercentUI();
 
   updateWhatsAppOutput();
+  if (typeof checkTargetGateModal === "function") {
+    checkTargetGateModal();
+  }
 }
 
 // Render Categories List
@@ -933,6 +948,10 @@ inputTarget.addEventListener("input", (e) => {
   updateWhatsAppOutput();
 });
 
+inputTarget.addEventListener("blur", () => {
+  checkTargetGateModal();
+});
+
 inputAchievement.addEventListener("input", (e) => {
   inputAchievement.dataset.manualOverride = "true";
   const raw = e.target.value.trim();
@@ -941,6 +960,10 @@ inputAchievement.addEventListener("input", (e) => {
   updateTargetPercentUI();
   saveLocalState();
   updateWhatsAppOutput();
+});
+
+inputTarget.addEventListener("blur", () => {
+  checkTargetGateModal();
 });
 
 // Weekly roll-over feature (manual push +7 hari)
@@ -1488,7 +1511,9 @@ let collageRects = [];
 let activeCollageIndex = 0;
 
 const collageFileInput = document.getElementById("collageFileInput");
+const collageFileInputMulti = document.getElementById("collageFileInputMulti");
 const btnPickCollagePhotos = document.getElementById("btnPickCollagePhotos");
+const btnPickCollageMulti = document.getElementById("btnPickCollageMulti");
 const btnClearCollagePhotos = document.getElementById("btnClearCollagePhotos");
 const collageCountLabel = document.getElementById("collageCountLabel");
 const collageThumbsStrip = document.getElementById("collageThumbsStrip");
@@ -1801,13 +1826,24 @@ function initCollageEditor() {
     collageFileInput.click();
   });
 
+  if (btnPickCollageMulti && collageFileInputMulti) {
+    btnPickCollageMulti.addEventListener("click", () => {
+      if (collageItems.length >= MAX_COLLAGE_PHOTOS) {
+        showToast("Maksimal 10 foto dalam 1 kolase! Hapus salah satu jika ingin ganti.");
+        return;
+      }
+      collageFileInputMulti.value = "";
+      collageFileInputMulti.click();
+    });
+  }
+
   btnClearCollagePhotos.addEventListener("click", () => {
     if (confirm("Hapus semua foto kolase yang dipilih?")) {
       clearAllCollagePhotos();
     }
   });
 
-  collageFileInput.addEventListener("change", async (e) => {
+  async function handleCollageFilesSelected(e) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -1842,7 +1878,12 @@ function initCollageEditor() {
       collageEditorWrap.classList.remove("hidden");
       selectCollageSlot(activeCollageIndex);
     }
-  });
+  }
+
+  collageFileInput.addEventListener("change", handleCollageFilesSelected);
+  if (collageFileInputMulti) {
+    collageFileInputMulti.addEventListener("change", handleCollageFilesSelected);
+  }
 
   btnGenerateCollage.addEventListener("click", () => {
     if (collageItems.length === 0) return;
@@ -2104,6 +2145,96 @@ function initCollageEditor() {
 }
 
 // ==========================================
+// Mandatory Monthly Target Gate Modal
+// ==========================================
+
+const targetGateModal = document.getElementById("targetGateModal");
+const targetGateMessage = document.getElementById("targetGateMessage");
+const modalTargetMonthLabel = document.getElementById("modalTargetMonthLabel");
+const modalTargetInput = document.getElementById("modalTargetInput");
+const btnSaveModalTarget = document.getElementById("btnSaveModalTarget");
+
+function hasValidTarget() {
+  return cleanNum(state.targetAmount) > 0;
+}
+
+function checkTargetGateModal() {
+  if (!targetGateModal) return;
+  const now = new Date();
+  const realtimeMonthName = MONTH_NAMES_ID[now.getMonth()];
+
+  if (targetGateMessage) {
+    targetGateMessage.textContent = `Masukan terlebih dahulu target penjualan bulan ${realtimeMonthName} agar dapat menggunakan fitur fitur web ini`;
+  }
+  if (modalTargetMonthLabel) {
+    modalTargetMonthLabel.textContent = realtimeMonthName;
+  }
+
+  if (!hasValidTarget()) {
+    targetGateModal.classList.remove("hidden");
+  } else {
+    targetGateModal.classList.add("hidden");
+  }
+}
+
+function initTargetGateModal() {
+  if (!targetGateModal || !modalTargetInput || !btnSaveModalTarget) return;
+
+  modalTargetInput.addEventListener("input", (e) => {
+    const raw = e.target.value.trim();
+    e.target.value = raw ? formatRupiah(raw) : "";
+  });
+
+  function saveModalTargetAction() {
+    const val = cleanNum(modalTargetInput.value);
+    const now = new Date();
+    const realtimeMonthName = MONTH_NAMES_ID[now.getMonth()];
+    const realtimeMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    if (val <= 0) {
+      showToast(`⚠️ Masukan terlebih dahulu target penjualan bulan ${realtimeMonthName}!`);
+      modalTargetInput.focus();
+      return;
+    }
+
+    state.activeMonthKey = realtimeMonthKey;
+    state.targetMonth = realtimeMonthName;
+    state.targetAmount = formatRupiah(val);
+
+    if (monthNameInput) monthNameInput.value = state.targetMonth;
+    if (inputTarget) inputTarget.value = state.targetAmount;
+
+    targetGateModal.classList.add("hidden");
+    updateTargetPercentUI();
+    updateWhatsAppOutput();
+    saveLocalState();
+    saveToCloud(false);
+    showToast(`✓ Target bulan ${realtimeMonthName} (Rp. ${state.targetAmount}) berhasil disimpan! 🎯`);
+  }
+
+  btnSaveModalTarget.addEventListener("click", saveModalTargetAction);
+  modalTargetInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveModalTargetAction();
+    }
+  });
+
+  // Intercept any attempt to interact with the page if target is empty
+  const guardInteraction = (e) => {
+    if (hasValidTarget()) return;
+    if (targetGateModal.contains(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    checkTargetGateModal();
+    setTimeout(() => modalTargetInput.focus(), 50);
+  };
+
+  document.addEventListener("focusin", guardInteraction, true);
+  document.addEventListener("click", guardInteraction, true);
+}
+
+// ==========================================
 // Live Realtime Clock & Date Sync Engine
 // ==========================================
 
@@ -2120,6 +2251,14 @@ function updateLiveClock() {
   const ss = String(now.getSeconds()).padStart(2, '0');
 
   el.textContent = `${dayName}, ${dateNum} ${monthName} ${year} • ${hh}:${mm}:${ss} WIB`;
+
+  // Auto-detect when realtime clock enters the 1st of a new month
+  const realtimeMonthKey = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  if (state.activeMonthKey && state.activeMonthKey !== realtimeMonthKey) {
+    pruneOldDatabaseHistory();
+    renderAll();
+    saveToCloud(true);
+  }
 }
 
 // Start ticking immediately
@@ -2129,6 +2268,7 @@ setInterval(updateLiveClock, 1000);
 function initApp() {
   initTheme();
   pruneOldDatabaseHistory();
+  initTargetGateModal();
   renderAll();
   updateLiveClock();
   initCollageEditor();

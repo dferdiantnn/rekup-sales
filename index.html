@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.5.0">
+  <link rel="stylesheet" href="style.css?v=2.6.0">
   <!-- Tesseract.js for client-side OCR (Runs 100% in browser, completely free & offline-ready after load) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
@@ -321,15 +321,20 @@
       <p class="section-desc">Gabungkan 3, 5, hingga 10 foto (5 kiri & 5 kanan) dari galeri HP (mendukung semua format gambar: JPG, PNG, HEIC, WEBP, dll) menjadi 1 gambar ukuran Instagram Story (1080×1920).</p>
 
       <input type="file" id="collageFileInput" accept="image/*" multiple="multiple" class="hidden">
+      <input type="file" id="collageFileInputMulti" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/octet-stream" multiple="multiple" class="hidden">
 
       <div class="collage-upload-bar">
         <button type="button" class="btn btn-scan-camera" id="btnPickCollagePhotos">
-          🖼️ Pilih Foto dari Galeri (<span id="collageCountLabel">0</span>/10)
+          🖼️ Pilih dari Galeri (<span id="collageCountLabel">0</span>/10)
+        </button>
+        <button type="button" class="btn btn-secondary" id="btnPickCollageMulti" title="Khusus Android / Google Foto agar langsung bisa centang banyak foto sekaligus">
+          📂 Pilih Banyak (Android)
         </button>
         <button type="button" class="btn-ghost-sm hidden" id="btnClearCollagePhotos">
           🗑️ Hapus Semua
         </button>
       </div>
+      <small class="helper-text">💡 <b>Khusus Android (Google Foto):</b> Klik tombol <b>📂 Pilih Banyak (Android)</b> atau <b>tekan & tahan (long-press) foto pertama</b> sampai muncul centang biru untuk memilih banyak foto sekaligus.</small>
 
       <!-- Selected Thumbnails Strip -->
       <div class="collage-thumbs-strip hidden" id="collageThumbsStrip"></div>
@@ -442,6 +447,32 @@
       </div>
     </div>
 
+    <!-- Mandatory Monthly Target Gate Modal -->
+    <div class="modal-backdrop hidden" id="targetGateModal">
+      <div class="modal-sheet target-gate-sheet">
+        <div class="modal-header">
+          <h3>🎯 Target Penjualan Bulanan Wajib Diisi</h3>
+        </div>
+        <div class="modal-body">
+          <div class="target-gate-alert" id="targetGateMessage">
+            Masukan terlebih dahulu target penjualan bulan November agar dapat menggunakan fitur fitur web ini
+          </div>
+          <div class="form-group" style="margin-top: 10px;">
+            <label for="modalTargetInput">Nominal Target Penjualan Bulan <span id="modalTargetMonthLabel">November</span></label>
+            <div class="input-currency">
+              <span>Rp.</span>
+              <input type="text" id="modalTargetInput" placeholder="Contoh: 150.000.000" inputmode="numeric">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="btnSaveModalTarget">
+            💾 Simpan Target & Mulai Gunakan Web
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden">Teks WhatsApp berhasil disalin! 🎉</div>
 
@@ -450,6 +481,6 @@
     </footer>
   </div>
 
-  <script src="app.js?v=2.5.6"></script>
+  <script src="app.js?v=2.6.0"></script>
 </body>
 </html>
